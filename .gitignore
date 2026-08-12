@@ -1,0 +1,58 @@
+# Large data files & datasets
+data/
+datasets/
+*.parquet
+*.feather
+*.orc
+*.csv
+*.tsv
+*.npz
+*.npy
+
+# Model weights, checkpoints & binaries
+models/
+checkpoints/
+*.pkl
+*.pickle
+*.pth
+*.pt
+*.bin
+*.onnx
+*.model
+*.cbm
+*.safetensors
+*.h5
+*.hdf5
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+*.bz2
+
+# Submissions & outputs
+submissions/
+output/
+outputs/
+catboost_info/
+
+# Jupyter Notebook checkpoints & autosaves
+.ipynb_checkpoints/
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+*.log
+
+# IDE & System files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
