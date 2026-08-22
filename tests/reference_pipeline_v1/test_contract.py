@@ -1,0 +1,30 @@
+import numpy as np
+import torch
+
+from src.reference_pipeline_v1.contract import PRE_NY_PRIMARY, anchor_manifest, validate_profile, windows
+from src.reference_pipeline_v1.meta import fit_meta, load_predict
+from src.reference_pipeline_v1.models import EventTimeTransformer, S1MaskedPretrainer, S2MultiHorizonPretrainer
+
+
+def test_anchors_and_cutoffs() -> None:
+    validate_profile(); rows = anchor_manifest()
+    assert len(rows) == 29
+    assert windows("2025-03-31")["state_history_start"] == "2025-01-01"
+
+
+def test_s1_s2_are_not_equivalent() -> None:
+    assert S1MaskedPretrainer.implementation_id != S2MultiHorizonPretrainer.implementation_id
+    assert set(S2MultiHorizonPretrainer()(torch.zeros(2, 180, 15))) == {"buy_7", "buy_14", "buy_30", "gmv_7", "gmv_14", "gmv_30"}
+
+
+def test_ett_all_empty_is_finite_and_zero() -> None:
+    model = EventTimeTransformer().eval(); content = torch.zeros(3, 180, 12); time = torch.zeros(3, 180, 12); ranks = torch.zeros(3, 180, dtype=torch.long); mask = torch.ones(3, 180, dtype=torch.bool); empty = torch.ones(3, dtype=torch.bool)
+    embedding, sequence = model.encode(content, time, ranks, mask, empty); output = model(content, time, ranks, mask, empty)
+    assert torch.equal(embedding, torch.zeros_like(embedding)); assert torch.isfinite(sequence).all(); assert all(torch.isfinite(value).all() for value in output.values())
+
+
+def test_meta_constraints_and_no_double_sigmoid() -> None:
+    rng = np.random.default_rng(42); bank = {"react": rng.normal(size=(20, 4)), "churn": rng.normal(size=(20, 4)), "amount": rng.normal(size=(20, 4)), "active": rng.integers(0, 2, 20), "target": rng.random(20)}
+    package = fit_meta(bank, "a" * 64); params = np.asarray(package["parameters"])
+    assert np.isclose(params[:4].sum(), 1) and np.isclose(params[4:8].sum(), 1)
+    pred = load_predict(package, bank); assert pred.shape == (20,) and np.isfinite(pred).all()

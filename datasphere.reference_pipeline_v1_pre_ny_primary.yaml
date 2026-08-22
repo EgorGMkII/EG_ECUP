@@ -1,0 +1,26 @@
+name: reference-pipeline-v1-pre-ny-primary
+desc: New deterministic REFERENCE_PIPELINE_V1 FULL_TWO_RUN_VALIDATION baseline; no submission.
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_reference_pipeline_v1.py
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/run_reference_pipeline_v1.py
+      - configs/reference_pipeline_v1/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - selected_users_100k.parquet
+outputs:
+  - artifacts/reference_pipeline_v1/pre_ny_primary/
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

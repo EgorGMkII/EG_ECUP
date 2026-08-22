@@ -1,4 +1,4 @@
-# Design manifest; UNRESOLVED forbids a future heavy run until explicitly fixed.
+# Executable contract for the new reference baseline.  Legacy IDs below are forensic aliases only.
 reference_pipeline_version: REFERENCE_PIPELINE_V1
 catboost:
   implementation_id: catboost_record_recipe_specialists_v1
@@ -16,11 +16,11 @@ s1:
   class_names: [GRUEncoder, MaskedBehaviorPretrainGRU, MultiTaskTransitionGRUModel]
   preprocessing_function: src.sequential.dataset.build_user_sequence_tensor
   input_schema: {representation: dense_daily, sequence_length: 180, channels: 15, history_days: 180}
-  masking: '20 percent active/day-span corruption; loss on masked positions'
+  masking: 'independent random daily mask p=0.20; zero first 12 channels; SmoothL1 all 15 channels on mask positions'
   encoder: {gru_layers: 2, hidden_dim: 128, dropout: 0.2, pooling: temporal_attention}
   empty_history_handling: 'dense zero-filled daily tensor; no separate token'
-  training: {pretrain_epochs: 4, downstream_epochs: 10, seed: 42, anchors: UNRESOLVED_FOR_V1}
-  specialist_construction: transferred_encoder_to_multitask_transition_heads
+  training: {pretrain_epochs: 4, downstream_epochs: 10, seed: derived_from_root_42}
+  specialist_construction: independent_deep_copies_react_churn_amount
   prediction_columns: [s1_react_logit, s1_churn_logit, s1_amount_z]
   prediction_space: {react_churn: raw_logit, amount: conditional_log1p}
 s2:
@@ -29,11 +29,11 @@ s2:
   class_names: [GRUEncoder, DenseTemporalPretrainGRU, MultiTaskTransitionGRUModel]
   preprocessing_function: src.sequential.dataset.build_user_sequence_tensor
   input_schema: {representation: dense_daily, sequence_length: 180, channels: 15, history_days: 180}
-  masking: 'none; dense 7/14/30-day buy, log-GMV, and purchase-day objectives'
+  masking: 'none; train 7/14/30-day buy BCE and log-GMV SmoothL1 only; purchase-day heads excluded'
   encoder: {gru_layers: 2, hidden_dim: 128, dropout: 0.2, pooling: temporal_attention}
   empty_history_handling: 'dense zero-filled daily tensor; no separate token'
-  training: {pretrain_epochs: 4, downstream_epochs: 10, seed: 42, anchors: UNRESOLVED_FOR_V1}
-  specialist_construction: transferred_encoder_to_multitask_transition_heads
+  training: {pretrain_epochs: 4, downstream_epochs: 10, seed: derived_from_root_42}
+  specialist_construction: independent_deep_copies_react_churn_amount
   prediction_columns: [s2_react_logit, s2_churn_logit, s2_amount_z]
   prediction_space: {react_churn: raw_logit, amount: conditional_log1p}
 ett:
@@ -45,8 +45,8 @@ ett:
   temporal_features: {tau_decay_days: 30, day_of_year: sin_cos}
   encoder: {layers: 2, d_model: 128, attention_heads: 4, dim_feedforward: 512, pooling: last_token, dropout: 0.1}
   empty_history_handling: 'unmask token 0 if all padded, then replace output embedding with zeros'
-  training: {steps: 4500, learning_rate: 0.0003, seed: 42, anchors: UNRESOLVED_FOR_V1}
-  specialist_construction: multitask_heads_inside_encoder
+  training: {steps: 4500, learning_rate: 0.0003, seed: derived_from_root_42, warmup_steps: 500, micro_batch: 128, accumulation: 4}
+  specialist_construction: independent_deep_copies_react_churn_amount
   prediction_columns: [ett_react_logit, ett_churn_logit, ett_amount_z]
   prediction_space: {react_churn: raw_logit, amount: conditional_log1p}
 legacy_variants:

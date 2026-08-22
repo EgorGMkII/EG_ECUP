@@ -1,0 +1,18 @@
+reference_pipeline_version: REFERENCE_PIPELINE_V1
+baseline_kind: new_reference_baseline
+profile: PRE_NY_PRIMARY
+root_seed: 42
+cohort:
+  path: selected_users_100k.parquet
+  sha256: d618e98744302eeec7352b6dc2f2db4f1b127298f1b84b6918304cf3368c4fd2
+run_a:
+  anchors: ['2025-03-31', '2025-04-14', '2025-04-28', '2025-05-12', '2025-05-26', '2025-06-09', '2025-06-23', '2025-07-07', '2025-07-21', '2025-08-04', '2025-08-18', '2025-09-01']
+  meta_anchor: '2025-10-13'
+run_b:
+  anchors: ['2025-03-31', '2025-04-14', '2025-04-28', '2025-05-12', '2025-05-26', '2025-06-09', '2025-06-23', '2025-07-07', '2025-07-21', '2025-08-04', '2025-08-18', '2025-09-01', '2025-09-15', '2025-09-29', '2025-10-13']
+  validation_anchor: '2025-11-24'
+resources:
+  cloud_instance_type: g1.1
+  working_storage: 100Gb
+  python: '3.10.13'
+outputs: artifacts/reference_pipeline_v1/pre_ny_primary/
