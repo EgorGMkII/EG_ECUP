@@ -48,6 +48,12 @@
    & 'C:\Users\egorg\anaconda3\envs\myenv\python.exe' scripts\datasphere_runner.py -c datasphere.<experiment>.yaml
    ```
 
+   Новые job запускаются runner-ом в синхронном streaming mode. Не добавлять
+   `--async`: CLI должен в реальном времени обновлять локальные `stdout.txt`,
+   `stderr.txt`, `gpu_stats.tsv` и `docker_stats.tsv`. Сам job-скрипт обязан
+   печатать stage/step heartbeat через `print(..., flush=True)` — нужны оба
+   условия.
+
 8. Немедленно записать job ID, PRE-RUN SHA, config SHA256 и ожидаемые outputs
    в журнал эксперимента.
 
@@ -67,6 +73,16 @@
 может инициировать повторное исполнение или вести себя неоднозначно. Также не
 пытаться скачать outputs, пока job не завершён — частичные outputs не являются
 достоверным результатом.
+
+Для тяжёлого multi-anchor pipeline заранее фиксируется полный union anchors.
+На VM один раз строятся causal feature frames и pooled sequence stores; RUN A и
+RUN B получают только разрешённые им anchor slices. Совпадающий causal frame
+переиспользуется, но модели RUN B всегда создаются и обучаются с нуля.
+
+Последовательности ETT хранить как pooled memmap (`float16` content/time,
+`int16` ranks, `bool` masks), без `np.savez_compressed`. Cache hit обязан
+проверяться до фильтрации raw log; multi-horizon labels вычисляются один раз на
+anchor, а не заново в каждом epoch.
 
 Локальная ошибка формирования команды, например `SyntaxError: Unexpected end
 of input` до запуска PowerShell, означает сбой локальной оркестрации, а не

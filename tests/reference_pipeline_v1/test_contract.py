@@ -1,9 +1,15 @@
+from datetime import date
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
 import numpy as np
+import polars as pl
 import torch
 
 from src.reference_pipeline_v1.contract import PRE_NY_PRIMARY, anchor_manifest, validate_profile, windows
 from src.reference_pipeline_v1.meta import fit_meta, load_predict
 from src.reference_pipeline_v1.models import EventTimeTransformer, S1MaskedPretrainer, S2MultiHorizonPretrainer
+from src.sequential.dataset import build_user_sequence_tensor
 
 
 def test_anchors_and_cutoffs() -> None:
@@ -28,3 +34,18 @@ def test_meta_constraints_and_no_double_sigmoid() -> None:
     package = fit_meta(bank, "a" * 64); params = np.asarray(package["parameters"])
     assert np.isclose(params[:4].sum(), 1) and np.isclose(params[4:8].sum(), 1)
     pred = load_predict(package, bank); assert pred.shape == (20,) and np.isfinite(pred).all()
+
+
+def test_daily_tensor_cache_short_circuits_raw_scan() -> None:
+    with TemporaryDirectory(prefix="reference_cache_", dir="artifacts") as directory:
+        cache_dir = Path(directory)
+        cached = np.zeros((2, 180, 15), dtype=np.float32)
+        np.save(cache_dir / "seq_tensor_2025-03-31_u2_t180.npy", cached)
+        # A cache hit must happen before touching the raw schema.  This deliberately
+        # lacks event_date/user_id and would fail if Polars filtering still ran.
+        malformed_raw = pl.DataFrame({"not_an_event_column": [1]})
+        loaded = build_user_sequence_tensor(malformed_raw, [10, 20], date(2025, 3, 31), seq_len=180, cache_dir=cache_dir)
+        assert loaded.shape == cached.shape
+        assert isinstance(loaded, np.memmap)
+        loaded._mmap.close()
+        del loaded

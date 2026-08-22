@@ -27,6 +27,12 @@ def build_user_sequence_tensor(
     """Builds a dense [N_users, seq_len, n_channels] float32 tensor for given users and anchor."""
     start_date = anchor_date - timedelta(days=seq_len - 1)
 
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"seq_tensor_{anchor_date.strftime('%Y-%m-%d')}_u{len(user_ids)}_t{seq_len}.npy"
+    cache_path = cache_dir / filename
+    if cache_path.exists():
+        return np.load(cache_path, mmap_mode="r")
+
     # 1. Filter raw log strictly within [start_date, anchor_date] for given user_ids
     user_set = set(user_ids)
     hist_df = (
@@ -37,13 +43,6 @@ def build_user_sequence_tensor(
         )
         .sort(["user_id", "event_date"])
     )
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"seq_tensor_{anchor_date.strftime('%Y-%m-%d')}_u{len(user_ids)}_t{seq_len}.npy"
-    cache_path = cache_dir / filename
-
-    if cache_path.exists():
-        return np.load(cache_path, mmap_mode="r")
 
     n_users = len(user_ids)
     n_channels = len(CHANNELS)
@@ -210,4 +209,3 @@ class MemmapMultiAnchorDataset(Dataset):
         y_log = torch.log1p(torch.clamp(y, min=0.0))
         is_buyer = (y > 0.0).float()
         return x, y_log, is_buyer, y
-

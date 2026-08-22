@@ -41,7 +41,7 @@ ett:
   source_paths: [scripts/build_joint_rmsle_submission.py]
   class_names: [EventTimeTransformer, MemmapDataset]
   preprocessing_function: scripts.build_joint_rmsle_submission.extract_event_time_sequences
-  input_schema: {representation: event_time, max_events: 180, content_features: 12, time_features: 12, history_days: 365}
+  input_schema: {representation: event_time, max_events: 180, content_features: 12, time_features: 12, history_days: 365, storage: pooled_memmap, content_time_dtype: float16, rank_dtype: int16}
   temporal_features: {tau_decay_days: 30, day_of_year: sin_cos}
   encoder: {layers: 2, d_model: 128, attention_heads: 4, dim_feedforward: 512, pooling: last_token, dropout: 0.1}
   empty_history_handling: 'unmask token 0 if all padded, then replace output embedding with zeros'

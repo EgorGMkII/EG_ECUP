@@ -1,17 +1,27 @@
 """Autonomous DataSphere Job Runner for Yandex DataSphere GPU execution."""
 
 import argparse
-import json
 import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
-from pathlib import Path
 
 DEFAULT_PROJECT_ID = "bt1pnckp8jvj2ckm20mu"
 DATASPHERE_EXE = r"C:\Users\egorg\anaconda3\envs\myenv\Scripts\datasphere.exe"
+
+
+def extract_job_id(output: str) -> str:
+    """Extract only an explicitly labelled job ID, never an operation/project ID."""
+    patterns = (
+        r"created job\s+[`'\"]((?:bt1|cbt)[a-zA-Z0-9_-]+)[`'\"]",
+        r"job[_ -]?id\s*[:=]\s*[`'\"]?((?:bt1|cbt)[a-zA-Z0-9_-]+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, output, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return ""
 
 
 def get_token(args_token: str = None) -> str:
@@ -44,30 +54,51 @@ def run_command(cmd_list: list, token: str = None) -> str:
     return res.stdout
 
 
+def stream_command(cmd_list: list, token: str = None) -> str:
+    """Run a synchronous CLI command while forwarding every output line."""
+    env = os.environ.copy()
+    if token:
+        env["YC_TOKEN"] = token
+    env["YC_CLI_INITIALIZATION_SILENCE"] = "true"
+    for proxy_name in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]:
+        env.pop(proxy_name, None)
+
+    process = subprocess.Popen(
+        cmd_list,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    output: list[str] = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        output.append(line)
+        print(line, end="", flush=True)
+    return_code = process.wait()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, cmd_list, "".join(output))
+    return "".join(output)
+
+
 def launch_job(config_path: str, project_id: str, token: str) -> str:
     print(f"[*] Submitting DataSphere Job for config {config_path} in project {project_id}...", flush=True)
-    # ``execute`` is synchronous unless --async is supplied: synchronous mode
-    # streams remote logs and waits for completion before returning.  Request its
-    # documented execution-data JSON so the existing monitor can receive the ID.
-    with tempfile.TemporaryDirectory(prefix="datasphere_runner_") as tmpdir:
-        execution_data_path = Path(tmpdir) / "execution.json"
-        cmd = [
-            DATASPHERE_EXE, "-t", token, "project", "job", "execute",
-            "-p", project_id, "-c", config_path,
-            "--async", "--output", str(execution_data_path),
-        ]
-        out = run_command(cmd, token)
-        execution_data = execution_data_path.read_text(encoding="utf-8") if execution_data_path.exists() else ""
-    print(out, flush=True)
-
-    # Extract Job ID from the documented async execution-data output, with the
-    # former CLI-output parsing retained as compatibility fallback.
+    # Synchronous execute is intentional: DataSphere CLI streams remote stdout,
+    # stderr, docker stats and GPU stats into its local per-job log directory.
+    cmd = [
+        DATASPHERE_EXE, "-t", token, "project", "job", "execute",
+        "-p", project_id, "-c", config_path,
+    ]
     try:
-        job_id = json.loads(execution_data).get("job_id", "")
-    except json.JSONDecodeError:
-        job_id = ""
-    match = re.search(r"\b(cbt[a-zA-Z0-9_-]+)\b", out)
-    job_id = job_id or (match.group(1) if match else "")
+        out = stream_command(cmd, token)
+    except subprocess.CalledProcessError as error:
+        out = error.output or ""
+        print(f"[-] Synchronous DataSphere execution exited with code {error.returncode}.", flush=True)
+
+    job_id = extract_job_id(out)
     if job_id:
         print(f"[+] Found DataSphere Job ID: {job_id}", flush=True)
         return job_id
@@ -109,7 +140,6 @@ def main():
     parser.add_argument("-t", "--token", default=None, help="Yandex Cloud OAuth Token")
     parser.add_argument("--id", default=None, help="Monitor existing Job ID")
     parser.add_argument("--download-only", action="store_true", help="Download files for Job ID")
-    parser.add_argument("--attach", action="store_true", help="Stream logs from an existing Job ID")
 
     args = parser.parse_args()
     token = get_token(args.token)
@@ -117,11 +147,6 @@ def main():
     if args.download_only and args.id:
         dl_cmd = [DATASPHERE_EXE, "-t", token, "project", "job", "download-files", "--id", args.id]
         print(run_command(dl_cmd, token))
-        return
-
-    if args.attach and args.id:
-        attach_cmd = [DATASPHERE_EXE, "-t", token, "project", "job", "attach", "--id", args.id]
-        print(run_command(attach_cmd, token))
         return
 
     if args.id:
