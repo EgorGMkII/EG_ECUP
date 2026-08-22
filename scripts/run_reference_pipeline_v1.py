@@ -113,6 +113,10 @@ def _loader(*arrays: np.ndarray, batch: int, shuffle: bool = True) -> DataLoader
     return DataLoader(TensorDataset(*tensors), batch_size=batch, shuffle=shuffle, num_workers=0, pin_memory=torch.cuda.is_available())
 
 
+def _float32(series: pl.Series) -> np.ndarray:
+    return series.to_numpy().astype(np.float32, copy=False)
+
+
 def _daily(raw: pl.DataFrame, users: list[int], anchor: str, cache: Path) -> np.ndarray:
     return np.asarray(build_user_sequence_tensor(raw, users, date.fromisoformat(anchor), seq_len=180, cache_dir=cache), dtype=np.float32)
 
@@ -148,7 +152,7 @@ def _base_gru(pretrainer: S1MaskedPretrainer | S2MultiHorizonPretrainer, raw: pl
     for epoch in range(10):
         base.train()
         for anchor, frame in zip(anchors, frames):
-            arrays = (_daily(raw, users, anchor, cache), frame["z_target"].to_numpy(np.float32), frame["was_active"].to_numpy(np.float32), frame["will_buy"].to_numpy(np.float32))
+            arrays = (_daily(raw, users, anchor, cache), _float32(frame["z_target"]), _float32(frame["was_active"]), _float32(frame["will_buy"]))
             for x, z, active, buy in _loader(*arrays, batch=2048):
                 output = base(x.to(device)); loss = transition_loss(output, z.to(device), active.to(device), buy.to(device)); optimizer.zero_grad(); loss.backward(); torch.nn.utils.clip_grad_norm_(base.parameters(), 1.0); optimizer.step()
         scheduler.step(); torch.save({"epoch": epoch + 1, "state_dict": base.state_dict()}, OUT / f"{run}_gru_base_epoch_{epoch + 1}.pt")
@@ -165,7 +169,7 @@ def _gru_specialists(base: TransitionBase, raw: pl.DataFrame, users: list[int], 
             completed = 0
             for anchor, frame in zip(anchors, frames):
                 daily = _daily(raw, users, anchor, cache); mask = frame["was_active"].to_numpy() == (0 if task == "react" else 1) if task != "amount" else frame["future_gmv_30d"].to_numpy() > 0
-                target = frame["will_buy"].to_numpy(np.float32) if task == "react" else (1 - frame["will_buy"].to_numpy(np.float32) if task == "churn" else frame["z_target"].to_numpy(np.float32))
+                target = _float32(frame["will_buy"]) if task == "react" else (1 - _float32(frame["will_buy"]) if task == "churn" else _float32(frame["z_target"]))
                 for x, y in _loader(daily[mask], target[mask], batch=512):
                     prediction = model(x.to(device)); loss = F.binary_cross_entropy_with_logits(prediction, y.to(device)) if task != "amount" else F.mse_loss(prediction, y.to(device)); optimizer.zero_grad(); loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); optimizer.step(); scheduler.step(); completed += 1
                     if completed >= steps: break
@@ -202,7 +206,7 @@ def _base_ett(raw: pl.DataFrame, users: list[int], frames: list[pl.DataFrame], a
     probe = model(torch.zeros(2, 180, 12, device=device), torch.zeros(2, 180, 12, device=device), torch.zeros(2, 180, dtype=torch.long, device=device), torch.ones(2, 180, dtype=torch.bool, device=device), torch.ones(2, dtype=torch.bool, device=device)); smoke_loss = sum(value.float().square().mean() for value in probe.values()); smoke_loss.backward(); optimizer.zero_grad(); amp = torch.cuda.is_available(); scaler = torch.amp.GradScaler("cuda", enabled=amp)
     while optimizer_step < total:
         for anchor, frame in zip(anchors, frames):
-            arrays = (*_event(raw, users, anchor, cache), frame["z_target"].to_numpy(np.float32), frame["was_active"].to_numpy(np.float32), frame["will_buy"].to_numpy(np.float32))
+            arrays = (*_event(raw, users, anchor, cache), _float32(frame["z_target"]), _float32(frame["was_active"]), _float32(frame["will_buy"]))
             for c, t, r, m, e, z, active, buy in _loader(*arrays, batch=128):
                 with torch.amp.autocast("cuda", enabled=amp): output = model(c.to(device), t.to(device), r.to(device), m.to(device), e.to(device)); loss = transition_loss(output, z.to(device), active.to(device), buy.to(device)) / 4
                 scaler.scale(loss).backward()
@@ -227,7 +231,7 @@ def _ett_specialists(base: EventTimeTransformer, raw: pl.DataFrame, users: list[
             optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=1e-4); scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=steps); complete = 0
             for anchor, frame in zip(anchors, frames):
                 mask = frame["was_active"].to_numpy() == (0 if task == "react" else 1) if task != "amount" else frame["future_gmv_30d"].to_numpy() > 0
-                target = frame["will_buy"].to_numpy(np.float32) if task == "react" else (1 - frame["will_buy"].to_numpy(np.float32) if task == "churn" else frame["z_target"].to_numpy(np.float32)); data = _event(raw, users, anchor, cache)
+                target = _float32(frame["will_buy"]) if task == "react" else (1 - _float32(frame["will_buy"]) if task == "churn" else _float32(frame["z_target"])); data = _event(raw, users, anchor, cache)
                 for batch in _loader(*(array[mask] for array in data), target[mask], batch=512):
                     *inputs, y = batch; prediction = model(*(x.to(device) for x in inputs)); loss = F.binary_cross_entropy_with_logits(prediction, y.to(device)) if task != "amount" else F.mse_loss(prediction, y.to(device)); optimizer.zero_grad(); loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); optimizer.step(); scheduler.step(); complete += 1
                     if complete >= steps: break
