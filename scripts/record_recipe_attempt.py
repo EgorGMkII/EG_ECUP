@@ -31,11 +31,16 @@ EXPECTED_INPUT_HASHES = {
     "record_submission": "3300512c94579fc6692efb3a6d51a160f0ae5f2375c1476c3aaa54ff775aedcd",
 }
 
-INPUT_PATHS = {
-    "sample_template": Path("sample_submit.csv"),
-    "joint_meta": Path("artifacts/specialized_hurdle/joint_meta_optimization/joint_weights_all_oof_candidate.json"),
-    "reference_prediction_bank": Path("test_specialists_raw_predictions_250k.parquet"),
-    "record_submission": Path("submission_specialized_hurdle_joint_rmsle.csv"),
+INPUT_CANDIDATES = {
+    "sample_template": (Path("sample_submit.csv"),),
+    # Depending on DataSphere CLI packaging, a one-file local-path may be
+    # mounted at its project-relative path or at /job/<basename>.
+    "joint_meta": (
+        Path("artifacts/specialized_hurdle/joint_meta_optimization/joint_weights_all_oof_candidate.json"),
+        Path("joint_weights_all_oof_candidate.json"),
+    ),
+    "reference_prediction_bank": (Path("test_specialists_raw_predictions_250k.parquet"),),
+    "record_submission": (Path("submission_specialized_hurdle_joint_rmsle.csv"),),
 }
 
 
@@ -51,11 +56,19 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def resolve_input_paths() -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    for name, candidates in INPUT_CANDIDATES.items():
+        path = next((candidate for candidate in candidates if candidate.is_file()), None)
+        if path is None:
+            raise ContractError(f"missing immutable input {name}; tried: {[str(candidate) for candidate in candidates]}")
+        paths[name] = path
+    return paths
+
+
 def immutable_input_hashes() -> dict[str, str]:
     hashes: dict[str, str] = {}
-    for name, path in INPUT_PATHS.items():
-        if not path.is_file():
-            raise ContractError(f"missing immutable input {name}: {path}")
+    for name, path in resolve_input_paths().items():
         actual = sha256(path)
         expected = EXPECTED_INPUT_HASHES[name]
         if actual != expected:
@@ -65,13 +78,23 @@ def immutable_input_hashes() -> dict[str, str]:
 
 
 def required_raw_inputs() -> tuple[Path, ...]:
-    return (Path("data/train.parquet"), Path("data/snapshots"), *INPUT_PATHS.values())
+    raw = next((path for path in (Path("data/train.parquet"), Path("train.parquet")) if path.is_file()), None)
+    snapshots = next((path for path in (Path("data/snapshots"), Path("snapshots")) if path.is_dir()), None)
+    if raw is None or snapshots is None:
+        return tuple(path for path in (raw, snapshots) if path is not None)
+    return (raw, snapshots, *resolve_input_paths().values())
 
 
 def validate_local_inputs() -> dict[str, str]:
-    missing = [str(path) for path in required_raw_inputs() if not path.exists()]
-    if missing:
-        raise ContractError(f"missing DataSphere local-paths inputs: {missing}")
+    raw_candidates = (Path("data/train.parquet"), Path("train.parquet"))
+    snapshot_candidates = (Path("data/snapshots"), Path("snapshots"))
+    if not any(path.is_file() for path in raw_candidates) or not any(path.is_dir() for path in snapshot_candidates):
+        raise ContractError(
+            "missing DataSphere local-paths inputs: "
+            f"raw_candidates={[str(path) for path in raw_candidates]}, "
+            f"snapshot_candidates={[str(path) for path in snapshot_candidates]}"
+        )
+    resolve_input_paths()
     return immutable_input_hashes()
 
 
@@ -167,10 +190,11 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def local_dry_run(output_dir: Path) -> None:
     hashes = validate_local_inputs()
-    template = pl.read_csv(INPUT_PATHS["sample_template"], n_rows=500)
+    template = pl.read_csv(resolve_input_paths()["sample_template"], n_rows=500)
     if template.columns != ["user_id", "predict"] or template.height == 0:
         raise ContractError("sample template must expose non-empty user_id,predict schema")
-    snapshot = pl.scan_parquet(Path("data/snapshots") / "snapshot_2026-01-14.parquet").head(1).collect()
+    snapshot_dir = next(path for path in (Path("data/snapshots"), Path("snapshots")) if path.is_dir())
+    snapshot = pl.scan_parquet(snapshot_dir / "snapshot_2026-01-14.parquet").head(1).collect()
     if "user_id" not in snapshot.columns:
         raise ContractError("snapshot_2026-01-14.parquet lacks user_id")
     report = {
@@ -271,7 +295,7 @@ def run_full(output_dir: Path, pre_run_sha: str) -> None:
     hashes_after = immutable_input_hashes()
     if hashes_before != hashes_after:
         raise ContractError("an immutable record input changed during the run")
-    report = validate_outputs(paths, INPUT_PATHS["sample_template"])
+    report = validate_outputs(paths, resolve_input_paths()["sample_template"])
     report.update({
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "duration_seconds": round(time.monotonic() - started, 3),

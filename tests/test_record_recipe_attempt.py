@@ -27,7 +27,7 @@ def test_run_paths_are_explicit_and_not_record_names() -> None:
 
 
 def test_immutable_hash_contract_rejects_drift(monkeypatch) -> None:
-    monkeypatch.setattr(attempt, "INPUT_PATHS", {"sample_template": Path("sample_submit.csv")})
+    monkeypatch.setattr(attempt, "INPUT_CANDIDATES", {"sample_template": (Path("sample_submit.csv"),)})
     monkeypatch.setattr(attempt, "EXPECTED_INPUT_HASHES", {"sample_template": "0" * 64})
     try:
         attempt.immutable_input_hashes()
@@ -35,3 +35,12 @@ def test_immutable_hash_contract_rejects_drift(monkeypatch) -> None:
         assert "hash mismatch" in str(error)
     else:
         raise AssertionError("expected immutable hash contract to reject drift")
+
+
+def test_input_resolver_accepts_flat_datasphere_file_layout(monkeypatch) -> None:
+    monkeypatch.setattr(
+        attempt,
+        "INPUT_CANDIDATES",
+        {"joint_meta": (Path("does_not_exist.json"), Path("sample_submit.csv"))},
+    )
+    assert attempt.resolve_input_paths()["joint_meta"] == Path("sample_submit.csv")
