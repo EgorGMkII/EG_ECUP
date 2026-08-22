@@ -9,7 +9,7 @@ env:
     requirements-file: requirements-datasphere.txt
     local-paths:
       - src/
-      - scripts/run_reference_pipeline_v1.py
+      - scripts/
       - configs/reference_pipeline_v1/
 inputs:
   - data/train.parquet

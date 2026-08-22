@@ -109,6 +109,7 @@ def main():
     parser.add_argument("-t", "--token", default=None, help="Yandex Cloud OAuth Token")
     parser.add_argument("--id", default=None, help="Monitor existing Job ID")
     parser.add_argument("--download-only", action="store_true", help="Download files for Job ID")
+    parser.add_argument("--attach", action="store_true", help="Stream logs from an existing Job ID")
 
     args = parser.parse_args()
     token = get_token(args.token)
@@ -116,6 +117,11 @@ def main():
     if args.download_only and args.id:
         dl_cmd = [DATASPHERE_EXE, "-t", token, "project", "job", "download-files", "--id", args.id]
         print(run_command(dl_cmd, token))
+        return
+
+    if args.attach and args.id:
+        attach_cmd = [DATASPHERE_EXE, "-t", token, "project", "job", "attach", "--id", args.id]
+        print(run_command(attach_cmd, token))
         return
 
     if args.id:
