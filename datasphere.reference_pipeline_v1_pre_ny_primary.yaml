@@ -17,7 +17,11 @@ inputs:
   - data/train.parquet
   - selected_users_100k.parquet
 outputs:
-  - artifacts/reference_pipeline_v1/pre_ny_primary/
+  - artifacts/reference_pipeline_v1/pre_ny_primary/run_manifest.json
+  - artifacts/reference_pipeline_v1/pre_ny_primary/frozen_meta_package.json
+  - artifacts/reference_pipeline_v1/pre_ny_primary/run_a_meta_prediction_bank.parquet
+  - artifacts/reference_pipeline_v1/pre_ny_primary/run_b_validation_prediction_bank.parquet
+  - artifacts/reference_pipeline_v1/pre_ny_primary/validation_report.json
 cloud-instance-types:
   - g1.1
 working-storage:
