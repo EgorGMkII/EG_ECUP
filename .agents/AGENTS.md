@@ -82,3 +82,5 @@
    - Перед экспериментом фиксировать код и конфиги отдельным `PRE-RUN` commit.
    - После получения результатов и Public LB создавать `RESULT` commit с job ID, метриками и хешами артефактов.
    - Не перезаписывать рекордные submissions и воспроизводимые артефакты; создавать новые версии с явной provenance.
+   - Перед каждым job обязательно пройти [`DATASPHERE_AGENT_RUNBOOK.md`](../DATASPHERE_AGENT_RUNBOOK.md): package-layout audit, micro dry-run и явный output budget.
+   - Для наблюдения за существующим job использовать только `datasphere_runner.py --id <JOB_ID>`; `--attach` не является мониторингом и запрещён без отдельной необходимости.
