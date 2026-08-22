@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import subprocess
 import sys
@@ -48,6 +49,9 @@ def sha(path: Path) -> str:
 
 
 def git_sha() -> str:
+    declared = os.environ.get("REFERENCE_V1_COMMIT_SHA")
+    if declared:
+        return declared
     return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 
 

@@ -3,6 +3,8 @@ desc: New deterministic REFERENCE_PIPELINE_V1 FULL_TWO_RUN_VALIDATION baseline; 
 cmd: >
   export PYTHONPATH=. ; python3 scripts/run_reference_pipeline_v1.py
 env:
+  vars:
+    - REFERENCE_V1_COMMIT_SHA
   python:
     type: manual
     version: 3.10.13
