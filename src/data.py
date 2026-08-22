@@ -7,11 +7,13 @@ import polars as pl
 
 # Default settings and configurations
 DEFAULT_AGGS: List[str] = ["sum", "max", "std", "mean"]
-DEFAULT_VALUE_COLS: List[str] = ["gmv", "searches"]
+DEFAULT_VALUE_COLS: List[str] = ["gmv", "searches", "to_cart", "to_ord"]
 DEFAULT_WINDOWS: List[Tuple[str, int, int]] = [
-    ("30d", 29, 0),   # [t-29, t-0] (includes anchor date)
-    ("60d", 59, 30),  # [t-59, t-30]
-    ("90d", 89, 60),  # [t-89, t-60]
+    ("30d", 29, 0),      # [t-29, t-0] (cumulative last 30 days)
+    ("60d", 59, 0),      # [t-59, t-0] (cumulative last 60 days)
+    ("90d", 89, 0),      # [t-89, t-0] (cumulative last 90 days)
+    ("30_60d", 59, 30),  # [t-59, t-30] (disjoint lag bucket: days 30-59 ago)
+    ("60_90d", 89, 60),  # [t-89, t-60] (disjoint lag bucket: days 60-89 ago)
 ]
 FEATURES_DIR: str = "data/v2/features"
 N_FOLDS: int = 4
@@ -25,18 +27,7 @@ def generate_cv_anchor_dates(
     min_history_days: int = 90,
     n_folds: Optional[int] = N_FOLDS,
 ) -> List[date]:
-    """Generates time-CV anchor dates for rolling window validation.
-
-    Args:
-        data: Polars DataFrame containing 'event_date'.
-        prediction_horizon_days: Forecast horizon in days (e.g. 30).
-        stride_days: Step size between consecutive anchor dates.
-        min_history_days: Minimum historical days required prior to anchor.
-        n_folds: Number of latest folds to return.
-
-    Returns:
-        List of sorted anchor dates.
-    """
+    """Generates time-CV anchor dates for rolling window validation."""
     min_date: date = data["event_date"].min()
     max_date: date = data["event_date"].max()
 
@@ -70,17 +61,7 @@ def build_window_agg_exprs(
     value_cols: List[str] = DEFAULT_VALUE_COLS,
     aggs: List[str] = DEFAULT_AGGS,
 ) -> List[pl.Expr]:
-    """Constructs native Polars expressions for window-based feature aggregations.
-
-    Args:
-        anchor_val: Target anchor date.
-        windows: List of (window_name, start_offset_days, end_offset_days).
-        value_cols: Columns to aggregate (e.g. ['gmv', 'searches']).
-        aggs: Aggregation functions ('sum', 'max', 'std', 'mean', 'count').
-
-    Returns:
-        List of Polars Expressions.
-    """
+    """Constructs native Polars expressions for window-based feature aggregations."""
     exprs: List[pl.Expr] = []
     for w_name, start_off, end_off in windows:
         w_start = anchor_val - timedelta(days=start_off)
@@ -105,6 +86,51 @@ def build_window_agg_exprs(
     return exprs
 
 
+def build_rfm_recency_exprs(anchor_val: date) -> List[pl.Expr]:
+    """Constructs native Polars expressions for Recency & Frequency active day counts."""
+    a_lit = pl.lit(anchor_val)
+    exprs = [
+        (a_lit - pl.col("event_date").max()).dt.total_days().alias("days_since_last_activity"),
+        (a_lit - pl.when(pl.col("searches") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_search"),
+        (a_lit - pl.when(pl.col("to_cart") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_cart"),
+        (a_lit - pl.when(pl.col("to_ord") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_order"),
+        (a_lit - pl.when(pl.col("gmv") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_positive_gmv"),
+        pl.when(pl.col("event_date").is_between(anchor_val - timedelta(days=29), anchor_val)).then(1).otherwise(0).sum().alias("active_days_30d"),
+        pl.when(pl.col("event_date").is_between(anchor_val - timedelta(days=89), anchor_val)).then(1).otherwise(0).sum().alias("active_days_90d"),
+    ]
+    return exprs
+
+
+def build_holiday_exprs(anchor_val: date) -> List[pl.Expr]:
+    """Constructs calendar & holiday proximity features for target anchor date."""
+    ny_year = anchor_val.year if (anchor_val.month == 1 and anchor_val.day == 1) else anchor_val.year + 1
+    ny_date = date(ny_year, 1, 1)
+    days_to_ny = float((ny_date - anchor_val).days)
+
+    feb23_year = anchor_val.year if anchor_val <= date(anchor_val.year, 2, 23) else anchor_val.year + 1
+    feb23_date = date(feb23_year, 2, 23)
+    days_to_feb23 = float((feb23_date - anchor_val).days)
+
+    mar8_year = anchor_val.year if anchor_val <= date(anchor_val.year, 3, 8) else anchor_val.year + 1
+    mar8_date = date(mar8_year, 3, 8)
+    days_to_mar8 = float((mar8_date - anchor_val).days)
+
+    w_start = anchor_val + timedelta(days=1)
+    w_end = anchor_val + timedelta(days=30)
+    holidays_to_check = []
+    for y in [anchor_val.year, anchor_val.year + 1]:
+        holidays_to_check.extend([date(y, 1, 1), date(y, 2, 23), date(y, 3, 8), date(y, 11, 11)])
+
+    covers_holiday = 1.0 if any(w_start <= h <= w_end for h in holidays_to_check) else 0.0
+
+    return [
+        pl.lit(days_to_ny).alias("days_to_new_year"),
+        pl.lit(days_to_feb23).alias("days_to_feb23"),
+        pl.lit(days_to_mar8).alias("days_to_mar8"),
+        pl.lit(covers_holiday).alias("target_window_covers_holiday"),
+    ]
+
+
 def generate_features(
     data: pl.DataFrame,
     anchor_dates: List[date],
@@ -113,19 +139,7 @@ def generate_features(
     windows: List[Tuple[str, int, int]] = DEFAULT_WINDOWS,
     aggs: List[str] = DEFAULT_AGGS,
 ) -> pl.DataFrame:
-    """Generates windowed aggregations for given user IDs and anchor dates.
-
-    Args:
-        data: Input event DataFrame.
-        anchor_dates: Target anchor dates.
-        user_ids: Optional subset of user_ids to calculate features for.
-        value_cols: Value columns for aggregation.
-        windows: Window definitions.
-        aggs: Aggregation operations.
-
-    Returns:
-        Polars DataFrame containing [anchor_date, user_id, feature_1, feature_2, ...]
-    """
+    """Generates windowed aggregations, RFM Recency, Holiday proximity & Monetary ratio features."""
     if user_ids is None:
         user_ids = data["user_id"].unique().sort().to_list()
 
@@ -147,9 +161,10 @@ def generate_features(
             pl.col("event_date") >= a - timedelta(days=max_back)
         )
         if len(ad) > 0:
+            agg_exprs = build_window_agg_exprs(a, windows, value_cols, aggs) + build_rfm_recency_exprs(a) + build_holiday_exprs(a)
             features = (
                 ad.group_by("user_id")
-                .agg(build_window_agg_exprs(a, windows, value_cols, aggs))
+                .agg(agg_exprs)
                 .with_columns(anchor_date=pl.lit(a))
             )
             parts.append(features)
@@ -170,9 +185,33 @@ def generate_features(
     feature_cols = [
         c for c in result.columns if c not in ["anchor_date", "user_id"]
     ]
-    fill_exprs = [pl.col(c).fill_null(0.0) for c in feature_cols]
+    
+    # Fill Recency nulls with 999.0 (never occurred) and numeric nulls with 0.0
+    rec_cols = [c for c in feature_cols if c.startswith("days_since_")]
+    num_cols = [c for c in feature_cols if c not in rec_cols]
+    
+    fill_exprs = [pl.col(c).fill_null(999.0) for c in rec_cols] + [pl.col(c).fill_null(0.0) for c in num_cols]
+    result = result.with_columns(fill_exprs)
 
-    return result.with_columns(fill_exprs)
+    # Derived Monetary ratio, Funnel conversion, and Trend features
+    derived_exprs = [
+        (pl.col("gmv_sum_90d") / (pl.col("to_ord_sum_90d") + 1e-5)).alias("mean_gmv_per_order_90d"),
+        (pl.col("gmv_sum_90d") / (pl.col("active_days_90d") + 1e-5)).alias("mean_gmv_per_active_day_90d"),
+        (pl.col("gmv_sum_30d") / (pl.col("to_ord_sum_30d") + 1e-5)).alias("mean_gmv_per_order_30d"),
+        (pl.col("gmv_sum_30d") / (pl.col("active_days_30d") + 1e-5)).alias("mean_gmv_per_active_day_30d"),
+        # Funnel conversion rates
+        (pl.col("to_cart_sum_30d") / (pl.col("searches_sum_30d") + 1e-5)).alias("cart_conversion_rate_30d"),
+        (pl.col("to_ord_sum_30d") / (pl.col("to_cart_sum_30d") + 1e-5)).alias("order_conversion_rate_30d"),
+        (pl.col("to_ord_sum_30d") / (pl.col("searches_sum_30d") + 1e-5)).alias("search_to_order_rate_30d"),
+        (pl.col("to_cart_sum_90d") / (pl.col("searches_sum_90d") + 1e-5)).alias("cart_conversion_rate_90d"),
+        (pl.col("to_ord_sum_90d") / (pl.col("to_cart_sum_90d") + 1e-5)).alias("order_conversion_rate_90d"),
+        (pl.col("to_ord_sum_90d") / (pl.col("searches_sum_90d") + 1e-5)).alias("search_to_order_rate_90d"),
+        # Activity trend features (30d vs 30_60d lag)
+        (pl.col("to_cart_sum_30d") / (pl.col("to_cart_sum_30_60d") + 1e-5)).alias("cart_trend_30_60d"),
+        (pl.col("searches_sum_30d") / (pl.col("searches_sum_30_60d") + 1e-5)).alias("search_trend_30_60d"),
+        (pl.col("gmv_sum_30d") / (pl.col("gmv_sum_30_60d") + 1e-5)).alias("gmv_trend_30_60d"),
+    ]
+    return result.with_columns(derived_exprs)
 
 
 def generate_targets(

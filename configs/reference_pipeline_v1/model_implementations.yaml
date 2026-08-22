@@ -1,0 +1,55 @@
+# Design manifest; UNRESOLVED forbids a future heavy run until explicitly fixed.
+reference_pipeline_version: REFERENCE_PIPELINE_V1
+catboost:
+  implementation_id: catboost_record_recipe_specialists_v1
+  source_paths: [scripts/build_joint_rmsle_submission.py]
+  class_names: [CatBoostClassifier, CatBoostRegressor]
+  preprocessing_function: src.specialized_hurdle.feature_store.build_causal_feature_store
+  input_schema: {feature_schema_hash: 93cd750609e0, history_days: 90}
+  training: {iterations: 1500, learning_rate: 0.04, depth: 6, seed: 42}
+  specialists: [react_raw_logit, churn_raw_logit, amount_conditional_log1p]
+  prediction_columns: [cb_react_logit, cb_churn_logit, cb_amount_z]
+  prediction_space: {react_churn: raw_logit, amount: conditional_log1p}
+s1:
+  implementation_id: s1_masked_behavior_ssl_gru180_v1
+  source_paths: [scripts/run_ssl_pretraining_experiments.py]
+  class_names: [GRUEncoder, MaskedBehaviorPretrainGRU, MultiTaskTransitionGRUModel]
+  preprocessing_function: src.sequential.dataset.build_user_sequence_tensor
+  input_schema: {representation: dense_daily, sequence_length: 180, channels: 15, history_days: 180}
+  masking: '20 percent active/day-span corruption; loss on masked positions'
+  encoder: {gru_layers: 2, hidden_dim: 128, dropout: 0.2, pooling: temporal_attention}
+  empty_history_handling: 'dense zero-filled daily tensor; no separate token'
+  training: {pretrain_epochs: 4, downstream_epochs: 10, seed: 42, anchors: UNRESOLVED_FOR_V1}
+  specialist_construction: transferred_encoder_to_multitask_transition_heads
+  prediction_columns: [s1_react_logit, s1_churn_logit, s1_amount_z]
+  prediction_space: {react_churn: raw_logit, amount: conditional_log1p}
+s2:
+  implementation_id: s2_dense_multihorizon_ssl_gru180_v1
+  source_paths: [scripts/run_ssl_pretraining_experiments.py]
+  class_names: [GRUEncoder, DenseTemporalPretrainGRU, MultiTaskTransitionGRUModel]
+  preprocessing_function: src.sequential.dataset.build_user_sequence_tensor
+  input_schema: {representation: dense_daily, sequence_length: 180, channels: 15, history_days: 180}
+  masking: 'none; dense 7/14/30-day buy, log-GMV, and purchase-day objectives'
+  encoder: {gru_layers: 2, hidden_dim: 128, dropout: 0.2, pooling: temporal_attention}
+  empty_history_handling: 'dense zero-filled daily tensor; no separate token'
+  training: {pretrain_epochs: 4, downstream_epochs: 10, seed: 42, anchors: UNRESOLVED_FOR_V1}
+  specialist_construction: transferred_encoder_to_multitask_transition_heads
+  prediction_columns: [s2_react_logit, s2_churn_logit, s2_amount_z]
+  prediction_space: {react_churn: raw_logit, amount: conditional_log1p}
+ett:
+  implementation_id: ett_record_builder_last_token_ff512_v1
+  source_paths: [scripts/build_joint_rmsle_submission.py]
+  class_names: [EventTimeTransformer, MemmapDataset]
+  preprocessing_function: scripts.build_joint_rmsle_submission.extract_event_time_sequences
+  input_schema: {representation: event_time, max_events: 180, content_features: 12, time_features: 12, history_days: 365}
+  temporal_features: {tau_decay_days: 30, day_of_year: sin_cos}
+  encoder: {layers: 2, d_model: 128, attention_heads: 4, dim_feedforward: 512, pooling: last_token, dropout: 0.1}
+  empty_history_handling: 'unmask token 0 if all padded, then replace output embedding with zeros'
+  training: {steps: 4500, learning_rate: 0.0003, seed: 42, anchors: UNRESOLVED_FOR_V1}
+  specialist_construction: multitask_heads_inside_encoder
+  prediction_columns: [ett_react_logit, ett_churn_logit, ett_amount_z]
+  prediction_space: {react_churn: raw_logit, amount: conditional_log1p}
+legacy_variants:
+  ett_run1_ff256_pooling_legacy_v1:
+    source_paths: [scripts/run1_train_meta_weights.py]
+    reason_not_canonical: 'user-selected record-builder ETT is FF512 last-token variant'

@@ -1,0 +1,29 @@
+# Declarative example only.  It is not a launcher or DataSphere payload.
+experiment_id: reference_pipeline_v1_pre_ny_primary
+mode: full_two_run_validation
+cohort:
+  path: selected_users_100k.parquet
+  sha256: d618e98744302eeec7352b6dc2f2db4f1b127298f1b84b6918304cf3368c4fd2
+  expected_users: 100000
+semantics:
+  activity_definition: record_legacy_90d_activity
+  history_days: 90
+  target_days: 30
+temporal:
+  meta_anchor: '2025-10-13'
+  validation_anchor: '2025-11-24'
+  max_labeled_date: '2026-02-13'
+  training_anchor_rule: target_end_lte_run_anchor
+models:
+  catboost: {implementation_id: UNRESOLVED, config: UNRESOLVED}
+  s1: {implementation_id: UNRESOLVED, preprocessing_version: UNRESOLVED, config: UNRESOLVED}
+  s2: {implementation_id: UNRESOLVED, preprocessing_version: UNRESOLVED, config: UNRESOLVED}
+  ett: {implementation_id: UNRESOLVED, preprocessing_version: UNRESOLVED, config: UNRESOLVED}
+specialists: {react: will_buy_given_inactive, churn: not_will_buy_given_active, amount: conditional_log1p_gmv}
+meta:
+  method: joint_rmsle_slsqp
+  alpha: 1.1
+  model_order: [CatBoost, S1, S2, ETT]
+  constraints: {react_weights: simplex, churn_weights: simplex, amount_coefficients: nonnegative}
+execution: {backend: datasphere, reuse_completed_stages: true, dry_run: true}
+artifacts: {root: artifacts/validation_runs}

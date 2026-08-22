@@ -1,0 +1,28 @@
+specialists_architecture:
+  react:
+    task: "binary_classification"
+    target: "will_buy"
+    filter: "was_active == 0"
+    loss: "BCEWithLogitsLoss"
+  churn:
+    task: "binary_classification"
+    target: "1 - will_buy"
+    filter: "was_active == 1"
+    loss: "BCEWithLogitsLoss"
+  amount:
+    task: "conditional_regression"
+    target: "log1p(future_gmv_30d)"
+    filter: "future_gmv_30d > 0"
+    loss: "MSELoss"
+
+fine_tuning_schedule:
+  phase_h:
+    description: "Encoder frozen, train new task head only"
+    steps: 1500
+    lr: 1.0e-3
+  phase_f:
+    description: "Unfreeze top encoder layer + task head"
+    steps: 2500
+    lr: 1.0e-4
+  total_specialist_steps: 4000
+  batch_size: 512

@@ -1,0 +1,194 @@
+"""Script to generate transition_modeling.ipynb notebook."""
+
+import json
+from pathlib import Path
+
+NOTEBOOK_PATH = Path("transition_modeling.ipynb")
+
+
+def main():
+    cells = [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "# 🚀 Моделирование Переходов Пользователей (Transition Modeling: Reactivation & Churn)\n",
+                "\n",
+                "Данный ноутбук содержит полный цикл анализа, визуализации и оценки моделей переходных состояний пользователей:\n",
+                "1. **Аудит исходных результатов и декомпозиция квадрата ошибки (SSE / MSE)** по 4-м переходам;\n",
+                "2. **Оценка специализированных классификаторов (CatBoost Reactivation & Churn)** на 65+ Lifecycle/Last-Year признаках;\n",
+                "3. **Бенчмарк длиннопоследовательных архитектур (GRU-90 vs GRU-365 vs Hierarchical GRU vs Patch Transformer-365)**;\n",
+                "4. **Итоговый Tri-Ensemble (CatBoost Transitions + Hierarchical GRU + Transformer)** со снижением ошибки до `RMSLE = 1.6755`.\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import polars as pl\n",
+                "import numpy as np\n",
+                "import matplotlib.pyplot as plt\n",
+                "from pathlib import Path\n",
+                "\n",
+                "TRANSITIONS_ARTIFACTS = Path('artifacts/transitions')\n",
+                "print('[+] Loaded libraries and path configs.')\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## 1. Аудит baseline декомпозиции квадрата ошибки (Canonical Audit 2026-01-14)\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "audit_df = pl.read_parquet(TRANSITIONS_ARTIFACTS / 'baseline_cv3_audit.parquet')\n",
+                "print(f'Total validation rows: {audit_df.height:,}')\n",
+                "audit_df.head(5)\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## 2. Результаты Эксперимента A: Отдельные CatBoost Reactivation и Churn Классификаторы\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "exp_a_df = pl.read_parquet(TRANSITIONS_ARTIFACTS / 'experiment_A_predictions.parquet')\n",
+                "print('Experiment A Predictions shape:', exp_a_df.shape)\n",
+                "\n",
+                "# Comparison Table\n",
+                "tbl_a = pl.DataFrame({\n",
+                "    'Configuration': [\n",
+                "        'A0: Base-rate Prior',\n",
+                "        'A1: Current Single Hurdle',\n",
+                "        'A2: Separate Classifiers (Old Feats)',\n",
+                "        'A3: Separate Classifiers + Lifecycle & LY Feats',\n",
+                "    ],\n",
+                "    'Overall_RMSLE': [1.86618, 1.71455, 1.71837, 1.72014],\n",
+                "    'Reactivation_AUC': [0.5000, 0.7334, 0.7333, 0.7541],\n",
+                "    'Reactivation_Brier': [0.2014, 0.1712, 0.1723, 0.1698],\n",
+                "    'Churn_AUC': [0.5000, 0.7967, 0.7964, 0.7969],\n",
+                "    'Churn_Brier': [0.1921, 0.1514, 0.1522, 0.1534],\n",
+                "})\n",
+                "tbl_a\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## 3. Результаты Эксперимента C: Длиннопоследовательные Энкодеры (GRU-365 & Patch Transformer)\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "tbl_seq = pl.DataFrame({\n",
+                "    'Model': [\n",
+                "        '1. GRU-90 (Control Baseline)',\n",
+                "        '2. GRU-365 (Full Year Daily)',\n",
+                "        '3. Patch Transformer-365 (52 Weekly Patches)',\n",
+                "        '4. Hierarchical GRU (90d Daily + 275d Weekly)',\n",
+                "    ],\n",
+                "    'RMSLE_Factorized': [1.72129, 1.69498, 1.76491, 1.69250],\n",
+                "    'RMSLE_Direct': [1.73320, 1.70919, 1.73201, 1.70771],\n",
+                "    'Reactivation_AUC': [0.7332, 0.7656, 0.7456, 0.7638],\n",
+                "    'Churn_AUC': [0.7952, 0.8088, 0.7936, 0.8073],\n",
+                "})\n",
+                "tbl_seq\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## 4. Сравнительная декомпозиция квадратичной ошибки (Baseline vs Tri-Ensemble)\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "sse_comp = pl.DataFrame({\n",
+                "    'Transition State': [\n",
+                "        '0 -> 0 (Stable Sleep)',\n",
+                "        '0 -> >0 (Reactivation)',\n",
+                "        '>0 -> 0 (Churn)',\n",
+                "        '>0 -> >0 (Retention)',\n",
+                "    ],\n",
+                "    'User Count': [31554, 12244, 14462, 41740],\n",
+                "    'Baseline SSE': [35733.97, 75556.39, 98089.77, 84080.12],\n",
+                "    'Tri-Ensemble SSE': [37322.54, 69324.10, 91070.22, 83031.40],\n",
+                "    'SSE Reduction (%)': ['+4.4%', '-8.2%', '-7.2%', '-1.2%'],\n",
+                "    'Baseline RMSLE': [1.064, 2.484, 2.604, 1.419],\n",
+                "    'Tri-Ensemble RMSLE': [1.088, 2.379, 2.509, 1.410],\n",
+                "})\n",
+                "sse_comp\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Visualizing SSE Reduction across Transition States\n",
+                "fig, ax = plt.subplots(figsize=(10, 5))\n",
+                "states = sse_comp['Transition State'].to_list()\n",
+                "base_sse = sse_comp['Baseline SSE'].to_list()\n",
+                "tri_sse = sse_comp['Tri-Ensemble SSE'].to_list()\n",
+                "\n",
+                "x = np.arange(len(states))\n",
+                "width = 0.35\n",
+                "\n",
+                "ax.bar(x - width/2, base_sse, width, label='Baseline Clean Ensemble v4', color='#3498db', alpha=0.85)\n",
+                "ax.bar(x + width/2, tri_sse, width, label='Tri-Ensemble (CB + Hier-GRU + Transformer)', color='#2ecc71', alpha=0.85)\n",
+                "\n",
+                "ax.set_ylabel('Sum of Squared Errors (SSE)')\n",
+                "ax.set_title('Снижение квадратичной ошибки (SSE) по 4-м переходам пользователей', fontsize=12, fontweight='bold')\n",
+                "ax.set_xticks(x)\n",
+                "ax.set_xticklabels(states, fontsize=10)\n",
+                "ax.legend()\n",
+                "ax.grid(axis='y', linestyle='--', alpha=0.5)\n",
+                "plt.tight_layout()\n",
+                "plt.show()\n",
+            ],
+        },
+    ]
+
+    notebook = {
+        "cells": cells,
+        "metadata": {
+            "language_info": {"name": "python"},
+            "orig_nbformat": 4,
+        },
+        "nbformat": 4,
+        "nbformat_minor": 2,
+    }
+
+    with open(NOTEBOOK_PATH, "w", encoding="utf-8") as f:
+        json.dump(notebook, f, indent=2, ensure_ascii=False)
+    print(f"[+] Saved {NOTEBOOK_PATH}")
+
+
+if __name__ == "__main__":
+    main()

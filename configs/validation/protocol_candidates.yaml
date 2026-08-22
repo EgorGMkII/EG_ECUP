@@ -1,0 +1,44 @@
+# Real dates calculated from canonical_anchors.yaml and max labeled date 2026-02-13.
+source:
+  canonical_anchor_count: 23
+  first_anchor: '2025-03-31'
+  last_anchor: '2026-01-14'
+  max_labeled_date: '2026-02-13'
+  admissibility: 'M < V and M+30d <= V and V+30d <= max_labeled_date'
+  admissible_pair_count: 208
+canonical_anchors:
+  ['2025-03-31', '2025-04-14', '2025-04-28', '2025-05-12', '2025-05-26', '2025-06-09', '2025-06-23', '2025-07-07', '2025-07-21', '2025-08-04', '2025-08-18', '2025-09-01', '2025-09-15', '2025-09-29', '2025-10-13', '2025-10-27', '2025-11-10', '2025-11-24', '2025-12-08', '2025-12-15', '2025-12-22', '2026-01-05', '2026-01-14']
+selected_profiles:
+  PRE_NY_PRIMARY:
+    meta_anchor: '2025-10-13'
+    meta_target: ['2025-10-14', '2025-11-12']
+    run_a_last_training_anchor: '2025-09-01'
+    run_a_training_anchor_count: 12
+    validation_anchor: '2025-11-24'
+    validation_target: ['2025-11-25', '2025-12-24']
+    run_b_last_training_anchor: '2025-10-13'
+    run_b_training_anchor_count: 15
+    crosses_new_year: false
+    validation_to_test_days: 81
+  NY_CROSSING_STRESS:
+    meta_anchor: '2025-10-27'
+    meta_target: ['2025-10-28', '2025-11-26']
+    run_a_last_training_anchor: '2025-09-15'
+    run_a_training_anchor_count: 13
+    validation_anchor: '2025-12-08'
+    validation_target: ['2025-12-09', '2026-01-07']
+    run_b_last_training_anchor: '2025-10-27'
+    run_b_training_anchor_count: 16
+    crosses_new_year: true
+    validation_to_test_days: 67
+  POST_NY_PUBLIC_PROXY:
+    meta_anchor: '2025-12-15'
+    meta_target: ['2025-12-16', '2026-01-14']
+    run_a_last_training_anchor: '2025-11-10'
+    run_a_training_anchor_count: 17
+    validation_anchor: '2026-01-14'
+    validation_target: ['2026-01-15', '2026-02-13']
+    run_b_last_training_anchor: '2025-12-15'
+    run_b_training_anchor_count: 20
+    crosses_new_year: false
+    validation_to_test_days: 30

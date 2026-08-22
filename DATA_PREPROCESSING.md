@@ -78,10 +78,19 @@ fold_df = pl.read_parquet("data/v2/features/fold_03/batch_*.parquet")
 * **Возвращает**: `list[date]`
 
 ### `build_window_agg_exprs(anchor_val, windows, value_cols, aggs)`
-Строит список выражений `pl.Expr` для временных окон (`30d`, `60d`, `90d`) и агрегатов (`sum`, `max`, `std`, `mean`).
+Строит список выражений `pl.Expr` для временных окон и агрегатов (`sum`, `max`, `std`, `mean`).
+
+Поддерживаемые типы окон в `DEFAULT_WINDOWS`:
+* **Кумулятивные окна (накопительные)**:
+  * `30d`: последние 30 дней (`[t-29 ... t]`)
+  * `60d`: последние 60 дней (`[t-59 ... t]`)
+  * `90d`: последние 90 дней (`[t-89 ... t]`)
+* **Лаговые бакеты (непересекающиеся интервалы)**:
+  * `30_60d`: период от 30 до 59 дней назад (`[t-59 ... t-30]`)
+  * `60_90d`: период от 60 до 89 дней назад (`[t-89 ... t-60]`)
 
 ### `generate_features(data, anchor_dates, user_ids, value_cols, windows, aggs)`
-Формирует датафрейм признаков `(anchor_date, user_id, gmv_sum_30d, searches_max_60d, ...)` для выбранных пользователей и якорных дат.
+Формирует датафрейм признаков `(anchor_date, user_id, gmv_sum_30d, gmv_sum_60d, gmv_sum_30_60d, ...)` для выбранных пользователей и якорных дат.
 
 ### `generate_targets(data, anchor_dates, user_ids, horizon_days=30, target_col="gmv")`
 Рассчитывает целевую переменную `target` — суммарный GMV за следующие `horizon_days` после `anchor_date`.

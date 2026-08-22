@@ -1,0 +1,38 @@
+catboost_specialists:
+  features_count: 375
+  task_type: "GPU"
+  random_seed: 42
+  allow_writing_files: false
+  
+  cb_react:
+    task: "binary_classification"
+    loss_function: "Logloss"
+    eval_metric: "Logloss"
+    iterations: 3500
+    learning_rate: 0.035
+    depth: 7
+    l2_leaf_reg: 6.0
+    filter: "was_active == 0"
+    target: "will_buy"
+
+  cb_churn:
+    task: "binary_classification"
+    loss_function: "Logloss"
+    eval_metric: "Logloss"
+    iterations: 3500
+    learning_rate: 0.035
+    depth: 7
+    l2_leaf_reg: 6.0
+    filter: "was_active == 1"
+    target: "1 - will_buy"
+
+  cb_amount:
+    task: "conditional_regression"
+    loss_function: "RMSELog"
+    eval_metric: "RMSE"
+    iterations: 3500
+    learning_rate: 0.035
+    depth: 7
+    l2_leaf_reg: 6.0
+    filter: "future_gmv_30d > 0"
+    target: "log1p(future_gmv_30d)"

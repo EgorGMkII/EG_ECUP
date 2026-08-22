@@ -1,0 +1,29 @@
+experiment_name: "SPECIALIZED_HURDLE_JOINT_250K_V2"
+description: "Full Scale-up of Specialized Hurdle Stack to ALL 250,000 users with increased steps and end-to-end Joint RMSLE Meta-Weights."
+
+cohort:
+  total_users: 250000
+  sample_submit_path: "sample_submit.csv"
+  raw_events_path: "data/train.parquet"
+  snapshots_dir: "data/snapshots"
+
+fixed_constants:
+  alpha: 1.1
+
+run_a_meta:
+  meta_anchor: "2025-12-15"
+  meta_target_start: "2025-12-16"
+  meta_target_end: "2026-01-14"
+  training_cutoff: "2025-12-15"
+  allowed_anchors_count: 17
+  first_anchor: "2025-03-31"
+  last_anchor: "2025-11-10"
+
+run_b_final:
+  test_anchor: "2026-02-13"
+  test_target_start: "2026-02-14"
+  test_target_end: "2026-03-15"
+  training_cutoff: "2026-02-13"
+  allowed_anchors_count: 23
+  first_anchor: "2025-03-31"
+  last_anchor: "2026-01-14"

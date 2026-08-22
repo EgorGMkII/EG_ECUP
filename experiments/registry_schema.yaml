@@ -1,0 +1,19 @@
+# Schema/example only.  No invented commits, job IDs, or results.
+experiment:
+  experiment_id: REQUIRED
+  parent_experiment: OPTIONAL
+  pre_run_commit: REQUIRED_BEFORE_LAUNCH
+  result_commit: REQUIRED_AFTER_RESULT
+  reference_pipeline_version: REQUIRED
+  cohort_sha256: REQUIRED
+  validation_profile: REQUIRED
+  model_implementation_ids: REQUIRED
+  config_sha256: REQUIRED
+  datasphere_job_ids: []
+  artifacts: [] # each: logical_id, path_or_location, sha256, size, schema
+  submission: {filename: OPTIONAL, sha256: OPTIONAL}
+  local_validation_rmsle: OPTIONAL
+  public_lb_rmsle: PUBLIC_LB_NOT_EVALUATED
+  status: PLANNED # PLANNED|RUNNING|FAILED|COMPLETED_LOCAL|AWAITING_PUBLIC|PUBLIC_SCORED|REJECTED|PROMOTED
+  decision: OPTIONAL
+  notes: OPTIONAL

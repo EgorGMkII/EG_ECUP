@@ -1,0 +1,43 @@
+{
+  "protocol_name": "CANONICAL_SPECIALIST_PROTOCOL_V1",
+  "fixed_on_anchor": "2025-08-04",
+  "phase_h": {
+    "description": "Head-only training with frozen encoder",
+    "epochs": 5,
+    "max_steps": 2500,
+    "head_lr": 0.001,
+    "weight_decay": 0.0001,
+    "patience": 3,
+    "batch_size": 256
+  },
+  "phase_f": {
+    "description": "Partial fine-tuning (top layer + pooling + head)",
+    "epochs": 5,
+    "max_steps": 3000,
+    "head_lr": 0.0001,
+    "encoder_lr": 1e-05,
+    "weight_decay": 0.0001,
+    "gradient_clip": 1.0,
+    "patience": 3,
+    "batch_size": 256
+  },
+  "catboost": {
+    "iterations": 1500,
+    "learning_rate": 0.04,
+    "depth": 6,
+    "early_stopping_rounds": 100
+  },
+  "ett": {
+    "max_events": 180,
+    "tau_decay_days": 30.0,
+    "d_model": 128,
+    "n_heads": 4,
+    "n_layers": 2
+  },
+  "t5_screening": {
+    "screening_fold": "fold_00",
+    "freeze_encoder": true,
+    "head_lr": 0.001,
+    "max_steps": 1500
+  }
+}

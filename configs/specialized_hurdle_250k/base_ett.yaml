@@ -1,0 +1,22 @@
+architecture: "Event_Time_Transformer"
+d_model: 128
+n_heads: 4
+n_layers: 2
+dim_feedforward: 256
+dropout: 0.10
+sequence_length: 180
+tau_decay_days: 30.0
+
+training:
+  batch_size: 512
+  max_lr: 3.0e-4
+  warmup_steps: 500
+  max_steps: 8000
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+  multitask_loss_weights:
+    factorized_z: 1.00
+    direct_z: 0.25
+    conditional_z: 0.25
+    reactivation_bce: 0.10
+    churn_bce: 0.10

@@ -1,0 +1,154 @@
+"""Script to generate gru_sweep_analysis.ipynb with clean plotly/matplotlib visualisations."""
+
+import json
+from pathlib import Path
+
+notebook_content = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "# 🚀 MultiTask GRU Systematic Sweep Analysis\n",
+                "\n",
+                "Интерактивный анализ результатов полного цикла экспериментов с **MultiTask GRU**:\n",
+                "1. **Этап A**: Длина истории (L44, L60, L90, L120, L180)\n",
+                "2. **Этап B**: Охват якорей (`recent_14` vs `all_existing_22`)\n",
+                "3. **Этап C**: Полный календарь с весенним якорем `2025-02-13` и каналом `is_observed`\n",
+                "4. **Этап D**: Гиперпараметры (Hidden size, layers, dropout, learning rate, loss weights)\n",
+                "5. **Этап E**: Устойчивость по 3 seeds (42, 43, 44) и валидация на 4-х временных бэктестах"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import polars as pl\n",
+                "import pandas as pd\n",
+                "import numpy as np\n",
+                "import matplotlib.pyplot as plt\n",
+                "import seaborn as sns\n",
+                "from pathlib import Path\n",
+                "\n",
+                "plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')\n",
+                "plt.rcParams['figure.figsize'] = (12, 6)\n",
+                "plt.rcParams['font.size'] = 11\n",
+                "\n",
+                "REGISTRY_PATH = Path('artifacts/gru_sweep/experiment_registry.csv')\n",
+                "if REGISTRY_PATH.exists():\n",
+                "    df_reg = pl.read_csv(REGISTRY_PATH).to_pandas()\n",
+                "    print(f'[+] Загружено {len(df_reg)} экспериментов из реестра!')\n",
+                "    display(df_reg.head())\n",
+                "else:\n",
+                "    print('[-] Реестр пока пуст или формируется.')"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## 1. Сравнение длины истории (Этап A: L44 to L180)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "if REGISTRY_PATH.exists():\n",
+                "    df_len = df_reg[df_reg['anchor_set'] == 'recent_14'].sort_values('sequence_length')\n",
+                "    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 5))\n",
+                "    \n",
+                "    ax1.plot(df_len['sequence_length'], df_len['rmsle_blend_cb'], 'o-', color='#2b5c8f', lw=2.5, ms=8, label='Blend RMSLE (50% CB + 50% GRU)')\n",
+                "    ax1.plot(df_len['sequence_length'], df_len['rmsle_factorized'], 's--', color='#e26d5c', lw=2, ms=7, label='Solo GRU Factorized RMSLE')\n",
+                "    ax1.set_title('Качество (RMSLE) vs Длина истории (дни)', fontweight='bold')\n",
+                "    ax1.set_xlabel('Длина последовательности (дней)')\n",
+                "    ax1.set_ylabel('RMSLE (меньше = лучше)')\n",
+                "    ax1.legend()\n",
+                "    \n",
+                "    ax2.plot(df_len['sequence_length'], df_len['reactivation_auc'], 'o-', color='#38b000', lw=2.5, label='Reactivation AUC')\n",
+                "    ax2.plot(df_len['sequence_length'], df_len['churn_auc'], '^-', color='#7209b7', lw=2.5, label='Churn AUC')\n",
+                "    ax2.set_title('AUC классификации переходов vs Длина истории', fontweight='bold')\n",
+                "    ax2.set_xlabel('Длина последовательности (дней)')\n",
+                "    ax2.set_ylabel('ROC-AUC (больше = лучше)')\n",
+                "    ax2.legend()\n",
+                "    \n",
+                "    plt.tight_layout()\n",
+                "    plt.show()"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## 2. Охват якорей (`recent_14` vs `all_existing_22` vs `full_calendar`)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "if REGISTRY_PATH.exists():\n",
+                "    df_anchors = df_reg[df_reg['run_id'].str.contains('recent14|all22|full_calendar')]\n",
+                "    plt.figure(figsize=(10, 5))\n",
+                "    sns.barplot(data=df_anchors, x='anchor_set', y='rmsle_blend_cb', hue='sequence_length', palette='viridis')\n",
+                "    plt.title('Сравнение стратегий покрытия якорей по Blend RMSLE', fontweight='bold')\n",
+                "    plt.ylabel('Blend RMSLE')\n",
+                "    plt.ylim(df_anchors['rmsle_blend_cb'].min() - 0.005, df_anchors['rmsle_blend_cb'].max() + 0.005)\n",
+                "    plt.show()"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## 3. Результаты 4-х временных бэктестов"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "BT_PATH = Path('artifacts/gru_sweep/four_backtests_summary.csv')\n",
+                "if BT_PATH.exists():\n",
+                "    df_bt = pl.read_csv(BT_PATH).to_pandas()\n",
+                "    display(df_bt)\n",
+                "    \n",
+                "    plt.figure(figsize=(12, 5))\n",
+                "    plt.plot(df_bt['anchor_date'], df_bt['rmsle_factorized'], 'o-', color='#e63946', lw=2.5, ms=8, label='RMSLE')\n",
+                "    plt.title('Устойчивость финальной MultiTask GRU на 4-х временных бэктестах', fontweight='bold')\n",
+                "    plt.xlabel('Якорная дата бэктеста')\n",
+                "    plt.ylabel('RMSLE')\n",
+                "    plt.legend()\n",
+                "    plt.show()\n",
+                "else:\n",
+                "    print('[-] Бэктесты еще выполняются.')"
+            ]
+        }
+    ],
+    "metadata": {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3"
+        },
+        "language_info": {
+            "name": "python",
+            "version": "3.11.0"
+        }
+    },
+    "nbformat": 4,
+    "nbformat_minor": 5
+}
+
+with open("gru_sweep_analysis.ipynb", "w", encoding="utf-8") as f:
+    json.dump(notebook_content, f, indent=2, ensure_ascii=False)
+
+print("[+] Created gru_sweep_analysis.ipynb successfully!")

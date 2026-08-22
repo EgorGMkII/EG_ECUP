@@ -1,0 +1,29 @@
+joint_meta_optimization:
+  target_metric: "RMSLE"
+  optimization_method: "SLSQP"
+  alpha_fixed: 1.1
+  
+  parameters_count: 13
+  parameters:
+    react_weights:
+      dimension: 4
+      models: ["cb_react_logit", "s1_react_logit", "s2_react_logit", "ett_react_logit"]
+      bounds: [0.0, 1.0]
+      constraint: "sum == 1.0"
+    churn_weights:
+      dimension: 4
+      models: ["cb_churn_logit", "s1_churn_logit", "s2_churn_logit", "ett_churn_logit"]
+      bounds: [0.0, 1.0]
+      constraint: "sum == 1.0"
+    amount_coefficients:
+      dimension: 4
+      models: ["cb_amount_z", "s1_amount_z", "s2_amount_z", "ett_amount_z"]
+      bounds: [0.0, 2.0]
+    amount_intercept:
+      dimension: 1
+      bounds: [-1.0, 1.0]
+
+  cross_validation:
+    type: "user_level_5fold"
+    split_column: "user_id"
+    evaluation_anchor: "2025-12-15"
