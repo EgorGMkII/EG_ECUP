@@ -11,9 +11,9 @@ env:
       - src/
       - scripts/run_reference_pipeline_v1.py
       - configs/reference_pipeline_v1/
-      - requirements-datasphere.txt
-      - data/train.parquet
-      - selected_users_100k.parquet
+inputs:
+  - data/train.parquet
+  - selected_users_100k.parquet
 outputs:
   - artifacts/reference_pipeline_v1/pre_ny_primary/
 cloud-instance-types:
