@@ -1,0 +1,26 @@
+name: ozon-run1-meta-weights
+desc: RUN 1 - Train Meta-Weights on 100k users (Tesla V100 GPU)
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run1_train_meta_weights.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - artifacts/selected_users_100k.parquet
+      - selected_users_100k.parquet
+
+outputs:
+  - artifacts/specialized_hurdle/
+
+cloud-instance-types:
+  - g1.1

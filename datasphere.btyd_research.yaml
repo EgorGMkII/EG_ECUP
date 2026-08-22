@@ -1,0 +1,23 @@
+name: ozon-btyd-full-research
+desc: Comprehensive BTYD Research and Incremental CatBoost Evaluation (T0-T5)
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_btyd_research_experiments.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - artifacts/selected_users_100k.parquet
+      - artifacts/btyd_research/
+
+outputs:
+  - artifacts/btyd_research/

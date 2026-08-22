@@ -1,0 +1,27 @@
+name: ozon-specialized-neural-hurdle
+desc: Specialized Hurdle Stack Neural Base and Specialist Training on Tesla V100 GPU
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/specialized_hurdle/05_run_neural_specialists_datasphere.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - artifacts/selected_users_100k.parquet
+      - selected_users_100k.parquet
+      - artifacts/specialized_hurdle/
+
+outputs:
+  - artifacts/specialized_hurdle/
+
+cloud-instance-types:
+  - g1.1

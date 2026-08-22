@@ -1,0 +1,37 @@
+name: ozon-stageC-event-time
+desc: Stage C (Event-Time Transformer Suite ETT0, ETT1, ETT2)
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_stage_c_event_time_experiments.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - artifacts/selected_users_100k.parquet
+      - artifacts/tweedie_catboost/
+      - artifacts/ssl_pretraining/
+      - artifacts/s1_s2_router/
+      - artifacts/event_time_encoder/
+
+outputs:
+  - artifacts/event_time_encoder/
+
+cloud-instance-types:
+  - g1.1
+
+working-storage:
+  type: SSD
+  size: 100Gb
+
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

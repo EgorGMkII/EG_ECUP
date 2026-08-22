@@ -1,0 +1,23 @@
+name: ozon-catboost-cadence-btyd-audit
+desc: Comprehensive CatBoost Cadence, Propensity, and BTYD Experiments
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_catboost_cadence_btyd_experiments.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - artifacts/selected_users_100k.parquet
+      - artifacts/catboost_cadence_audit/
+
+outputs:
+  - artifacts/catboost_cadence_audit/

@@ -1,0 +1,29 @@
+name: ozon-test-sanity
+desc: Quick DataSphere sanity check for GPU and data
+
+cmd: >
+  python3 scratch/test_datasphere_cloud.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - scratch/
+      - requirements-datasphere.txt
+      - data/
+
+outputs:
+  - artifacts/test_datasphere/
+
+cloud-instance-types:
+  - g1.1
+
+working-storage:
+  type: SSD
+  size: 100Gb
+
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 10s

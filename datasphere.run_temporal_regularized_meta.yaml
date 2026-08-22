@@ -1,0 +1,33 @@
+name: ozon-temporal-reg-meta-250k
+desc: Temporal Regularized Meta Optimization (Dec + Jan 250k Anchors)
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/specialized_hurdle_250k/run_temporal_regularized_meta.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - sample_submit.csv
+      - test_specialists_raw_predictions_250k_v2.parquet
+
+outputs:
+  - submission_specialized_hurdle_joint_250k_temporal_regularized.csv
+  - joint_meta_weights_250k_temporal_regularized.json
+  - amount_scaler_250k_temporal_regularized.json
+  - regularization_selection.json
+  - lambda_grid_results.csv
+  - meta_anchor_2025-12-15_predictions.parquet
+  - meta_anchor_2026-01-14_predictions.parquet
+  - run_status.json
+
+cloud-instance-types:
+  - g1.1

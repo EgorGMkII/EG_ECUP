@@ -1,0 +1,38 @@
+name: ozon-stage0-stageA-t5
+desc: Stage 0 (Anchor Edge Audit & A0_V1 vs A0_V2) and Stage A (T5 Reproduction Suite)
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_stage_0_and_a_t5_experiments.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - artifacts/selected_users_100k.parquet
+      - artifacts/tweedie_catboost/
+      - artifacts/ssl_pretraining/
+      - artifacts/anchor_edge_audit/
+      - artifacts/t5_reproduction/
+
+outputs:
+  - artifacts/anchor_edge_audit/
+  - artifacts/t5_reproduction/
+
+cloud-instance-types:
+  - g1.1
+
+working-storage:
+  type: SSD
+  size: 100Gb
+
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

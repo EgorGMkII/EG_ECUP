@@ -1,0 +1,35 @@
+name: ozon-ltv-gru-hurdle-research
+desc: End-to-End Hybrid Hurdle Loss Research (H0 to H3) on Yandex DataSphere GPU
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_hurdle_loss_experiment.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - artifacts/selected_users_100k.parquet
+      - artifacts/gru_hurdle_research/
+      - models/gru_sweep/gru_len_L180_recent14/best.pt
+
+outputs:
+  - artifacts/gru_hurdle_research/
+  - models/gru_hurdle_research/
+
+cloud-instance-types:
+  - g1.1
+
+working-storage:
+  type: SSD
+  size: 100Gb
+
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

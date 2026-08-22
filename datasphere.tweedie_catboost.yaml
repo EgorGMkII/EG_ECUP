@@ -1,0 +1,34 @@
+name: ozon-tweedie-catboost
+desc: Controlled CatBoost Tweedie vs Hurdle Experiments (C0-C3, Purged 11 Anchors)
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_tweedie_catboost_experiments.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - artifacts/selected_users_100k.parquet
+      - artifacts/tweedie_catboost/
+
+outputs:
+  - artifacts/tweedie_catboost/
+
+cloud-instance-types:
+  - g1.1
+
+working-storage:
+  type: SSD
+  size: 100Gb
+
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

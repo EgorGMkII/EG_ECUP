@@ -1,0 +1,16 @@
+name: ozon-datasphere-smoke
+desc: Minimal dependency-import smoke job; no data, artifacts, models, training, or inference.
+cmd: >
+  python3 datasphere_smoke.py
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - scripts/datasphere_smoke.py
+      - requirements-datasphere.txt
+outputs:
+  - smoke_result.json
+cloud-instance-types:
+  - g1.1

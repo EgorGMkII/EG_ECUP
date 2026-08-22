@@ -1,0 +1,27 @@
+name: ozon-canonical-250k-stack
+desc: Canonical Specialized Hurdle Stack on 250k (Exact 100k winning pipeline)
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/specialized_hurdle_canonical_250k.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - selected_users_100k.parquet
+      - sample_submit.csv
+
+outputs:
+  - submission_specialized_hurdle_canonical_250k.csv
+  - canonical_250k_meta_weights.json
+
+cloud-instance-types:
+  - g1.1

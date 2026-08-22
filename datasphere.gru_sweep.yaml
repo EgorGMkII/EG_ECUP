@@ -1,0 +1,35 @@
+name: ozon-ltv-gru-sweep
+desc: Systematic MultiTask GRU Sweep on Yandex DataSphere GPU
+
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_gru_sweep.py
+
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - artifacts/selected_users_100k.parquet
+      - artifacts/gru_sweep/
+      - artifacts/transformer_audit/
+
+outputs:
+  - artifacts/gru_sweep/
+  - models/gru_sweep/
+
+cloud-instance-types:
+  - g1.1
+
+working-storage:
+  type: SSD
+  size: 100Gb
+
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

@@ -11,9 +11,15 @@
 
 ### Существующие документы:
 1. [**`DATA_PREPROCESSING.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/DATA_PREPROCESSING.md) — Полное руководство по предобработке данных в Polars, нативным выражениям `pl.Expr`, архитектуре якорных дат (Time-CV) и батчингу.
-2. [**`DATASPHERE.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/DATASPHERE.md) — Инструкция по развертыванию и запуску кода в Yandex DataSphere.
-3. [**`README.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/README.md) — Базовая информация о репозитории.
-4. [**`AGENTS.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/.agents/AGENTS.md) — Данный файл со стандартами и правилами разработки.
+2. [**`EDA_PLAN.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/EDA_PLAN.md) — Пошаговый детальный 9-этапный план проведения исследовательского анализа данных (EDA).
+3. [**`EDA_RESULTS.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/EDA_RESULTS.md) — Итоговый конспект и численные результаты проведенных этапов EDA (аудит витрины, фолды, матрица состояний, бейзлайны, Hurdle результаты).
+4. [**`train_classifier.ipynb`**](file:///c:/Users/egorg/Documents/OZON_ECUP/train_classifier.ipynb) — Исполняемый ноутбук обучения, валидации и SHAP-анализа первого этапа (CatBoost Classifier `P(target > 0)`).
+5. [**`train_hurdle.ipynb`**](file:///c:/Users/egorg/Documents/OZON_ECUP/train_hurdle.ipynb) — Сквозной ноутбук двухэтапного Hurdle пайплайна (Классификатор + Conditional Regressor), Purged Time-CV и генерации сабмита.
+6. [**`DATASPHERE.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/DATASPHERE.md) — Инструкция по развертыванию и запуску кода в Yandex DataSphere.
+7. [**`README.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/README.md) — Базовая информация о репозитории.
+8. [**`SPECIALIZED_HURDLE_REPORT.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/SPECIALIZED_HURDLE_REPORT.md) — Аналитический отчет по рекордному эксперименту Specialized Hurdle Stack (Public LB: 1.6649), декомпозиция ошибок по состояниям и вклады моделей.
+9. [**`SPECIALIZED_HURDLE_FLOW.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/SPECIALIZED_HURDLE_FLOW.md) — Инженерное руководство и каталог ошибок (Post-Mortem & Best Practices) для сквозного воспроизведения RUN 1 и RUN 2 в DataSphere.
+10. [**`AGENTS.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/.agents/AGENTS.md) — Данный файл со стандартами и правилами разработки.
 
 ### Регламент работы с документацией:
 - **КОГДА ИЗУЧАТЬ**: Перед проведением исследований, написанием нового кода или refactoring-ом **ОБЯЗАТЕЛЬНО** прочитать существующую документацию. Сначала сверяться с проектом, а не делать предположения.
@@ -41,3 +47,38 @@
    - Весь переиспользуемый код выносить из ячеек ноутбуков в модули папки `src/`.
    - В ячейках ноутбуков оставлять только краткие вызовы функций, анализ и визуализацию.
    - Прописывать явные **Type Hints** (`typing`) и краткие информативные docstrings.
+
+4. **Строгий запрет на LaTeX в сообщениях диалога (ТОЛЬКО Unicode и моноширинный код)**:
+   - **КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО** использовать LaTeX-синтаксис в чате: знаки доллара (`$`, `$$`), макросы `\text{}`, `\ln`, `\exp`, `\mathbb{}`, `\times`, `\rightarrow`, `\sqrt{}` и любые другие TeX команды. В интерфейсе чата LaTeX НЕ рендерится!
+   - **ОБЯЗАТЕЛЬНО** писать абсолютно все математические формулы, переменные, уравнения и стрелки строго через **Unicode** или моноширинные блоки `code`:
+     - Вместо `$Y = \ln(1 + \text{GMV})$` писать: `Y = ln(1 + GMV)`.
+     - Вместо `$\hat{Y} = \exp(P \times \mathbb{E}[\ln(1+Y)]) - 1$` писать: `Y_pred = exp(P(buy) * E[ln(1 + GMV)]) - 1`.
+     - Использовать символы Unicode: `√`, `→`, `->`, `*`, `±`, `²`, `³`, `^2`, `σ`, `μ`, `·`.
+
+5. **Обязательное информирование в чате об ошибках и исправлениях (DataSphere / код)**:
+   - При падении любого задания на DataSphere или локального скрипта **ОБЯЗАТЕЛЬНО** сразу явно писать в чат пользователю:
+     * Что именно сломалось и точный текст/причину ошибки (например: `ModuleNotFoundError: catboost`, `ValueError: too many values to unpack`).
+     * Что конкретно было изменено/исправлено в коде или зависимостях для устранения сбоя.
+     * Факт повторного запуска и текущий статус.
+
+6. **Обязательный локальный микро-прогон (Dry-Run) перед КАЖДЫМ запуском на DataSphere**:
+   - **КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО** отправлять задачи в облако без предварительной локальной валидации!
+   - Перед вызовом `datasphere_runner.py` **ОБЯЗАТЕЛЬНО**:
+     * Проверить синтаксис и импорты: `python -m py_compile scripts/your_script.py src/*.py`.
+     * Сверить имена функций, аргументы и названия колонок со снапшотами/схемами.
+     * Прогнать быстрый локальный тест (100–500 строк или 1 итерация модели).
+     * Проверить, что локально созданы все папки из `local-paths:` и `outputs:`.
+     * Следовать регламенту в [`DATASPHERE_WORKFLOW_RULES.md`](file:///c:/Users/egorg/Documents/OZON_ECUP/DATASPHERE_WORKFLOW_RULES.md).
+
+7. **КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО тащить тяжелые готовые датасеты с сотнями колонок на ВМ (Сборка датасетов ТОЛЬКО на ВМ)**:
+   - В DataSphere передаются только исходные файлы (`data/train.parquet`, `data/snapshots/`, `selected_users_100k.parquet`), код и конфигурации.
+   - Запрещено загружать локально сгенерированные директории с десятками/сотнями временных таблиц (например, `artifacts/specialized_hurdle/feature_store/`, `oof/`).
+   - Сборка итоговых обучающих витрин признаков, извлечение последовательностей, фильтрация по колонкам и якорям **ОБЯЗАТЕЛЬНО производятся на лету на самой ВМ в начале исполнения скрипта**.
+   - Это обеспечивает моментальную отправку пакета (секунды) и исключает тайм-ауты сети и ConnectionResetError.
+
+8. **Git и DataSphere-регламент экспериментов**:
+   - DataSphere запускать только через `scripts/datasphere_runner.py` из `myenv`; прямой вызов `datasphere.exe` запрещён.
+   - Тяжёлые вычисления, обучение и inference выполнять в DataSphere, а не локально.
+   - Перед экспериментом фиксировать код и конфиги отдельным `PRE-RUN` commit.
+   - После получения результатов и Public LB создавать `RESULT` commit с job ID, метриками и хешами артефактов.
+   - Не перезаписывать рекордные submissions и воспроизводимые артефакты; создавать новые версии с явной provenance.

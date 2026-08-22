@@ -37,6 +37,18 @@ submissions/
 output/
 outputs/
 catboost_info/
+artifacts/
+smoke_result.json
+run_status.json
+amount_scaler_*.json
+*_meta_weights*.json
+regularization_selection.json
+artifacts/
+smoke_result.json
+run_status.json
+amount_scaler_*.json
+*_meta_weights*.json
+regularization_selection.json
 
 # Jupyter Notebook checkpoints & autosaves
 .ipynb_checkpoints/
