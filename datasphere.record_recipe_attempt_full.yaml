@@ -1,0 +1,29 @@
+name: ozon-record-recipe-attempt-full
+desc: Training-level attempt of the historical first-level joint recipe with immutable fixed joint meta; produces an isolated 250k candidate submission.
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/record_recipe_attempt.py --full --pre-run-sha __PRE_RUN_SHA__ --output-dir artifacts/record_recipe_attempt_v1
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - sample_submit.csv
+      - submission_specialized_hurdle_stack.csv
+      - submission_specialized_hurdle_joint_rmsle.csv
+      - test_specialists_raw_predictions_250k.parquet
+      - artifacts/specialized_hurdle/joint_meta_optimization/joint_weights_all_oof_candidate.json
+outputs:
+  - artifacts/record_recipe_attempt_v1/candidate_submission.csv
+  - artifacts/record_recipe_attempt_v1/raw_specialist_predictions.parquet
+  - artifacts/record_recipe_attempt_v1/diagnostics.parquet
+  - artifacts/record_recipe_attempt_v1/run_manifest.json
+  - artifacts/record_recipe_attempt_v1/result_report.json
+cloud-instance-types:
+  - g1.1

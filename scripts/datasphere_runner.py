@@ -5,7 +5,9 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 DEFAULT_PROJECT_ID = "bt1pnckp8jvj2ckm20mu"
 DATASPHERE_EXE = r"C:\Users\egorg\anaconda3\envs\myenv\Scripts\datasphere.exe"
@@ -84,19 +86,66 @@ def stream_command(cmd_list: list, token: str = None) -> str:
     return "".join(output)
 
 
-def launch_job(config_path: str, project_id: str, token: str) -> str:
+def resolve_pre_run_sha(value: str = None) -> str:
+    """Return the explicit SHA or the current tracked commit for a job manifest."""
+    if value:
+        return value
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def materialize_runtime_config(config_path: str, pre_run_sha: str = None) -> tuple[str, Path | None]:
+    """Fill the tracked PRE-RUN placeholder in a temporary sibling YAML.
+
+    `/job` is not a Git checkout.  Keeping the placeholder in the committed
+    manifest and materializing only its job-local value makes the executed SHA
+    explicit without modifying the tracked config after its PRE-RUN commit.
+    """
+    path = Path(config_path)
+    if not path.is_file():
+        return config_path, None
+    source = path.read_text(encoding="utf-8")
+    marker = "__PRE_RUN_SHA__"
+    if marker not in source:
+        return config_path, None
+    resolved = resolve_pre_run_sha(pre_run_sha)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=path.suffix,
+        prefix=f".{path.stem}.runtime_",
+        dir=path.parent,
+        delete=False,
+    ) as stream:
+        stream.write(source.replace(marker, resolved))
+        return stream.name, Path(stream.name)
+
+
+def launch_job(config_path: str, project_id: str, token: str, pre_run_sha: str = None) -> str:
     print(f"[*] Submitting DataSphere Job for config {config_path} in project {project_id}...", flush=True)
     # Synchronous execute is intentional: DataSphere CLI streams remote stdout,
     # stderr, docker stats and GPU stats into its local per-job log directory.
-    cmd = [
-        DATASPHERE_EXE, "-t", token, "project", "job", "execute",
-        "-p", project_id, "-c", config_path,
-    ]
+    effective_config, temporary_config = materialize_runtime_config(config_path, pre_run_sha)
+    if temporary_config:
+        print(f"[*] Injected PRE-RUN SHA into temporary job config: {temporary_config.name}", flush=True)
+    cmd = [DATASPHERE_EXE, "-t", token, "project", "job", "execute", "-p", project_id, "-c", effective_config]
     try:
-        out = stream_command(cmd, token)
-    except subprocess.CalledProcessError as error:
-        out = error.output or ""
-        print(f"[-] Synchronous DataSphere execution exited with code {error.returncode}.", flush=True)
+        try:
+            out = stream_command(cmd, token)
+        except subprocess.CalledProcessError as error:
+            out = error.output or ""
+            print(f"[-] Synchronous DataSphere execution exited with code {error.returncode}.", flush=True)
+    finally:
+        if temporary_config and temporary_config.exists():
+            temporary_config.unlink()
 
     job_id = extract_job_id(out)
     if job_id:
@@ -140,6 +189,7 @@ def main():
     parser.add_argument("-t", "--token", default=None, help="Yandex Cloud OAuth Token")
     parser.add_argument("--id", default=None, help="Monitor existing Job ID")
     parser.add_argument("--download-only", action="store_true", help="Download files for Job ID")
+    parser.add_argument("--pre-run-sha", default=None, help="SHA injected into __PRE_RUN_SHA__ in the runtime-only YAML copy")
 
     args = parser.parse_args()
     token = get_token(args.token)
@@ -153,7 +203,7 @@ def main():
         monitor_and_download(args.id, args.project_id, token)
         return
 
-    job_id = launch_job(args.config, args.project_id, token)
+    job_id = launch_job(args.config, args.project_id, token, args.pre_run_sha)
     if job_id:
         monitor_and_download(job_id, args.project_id, token)
 

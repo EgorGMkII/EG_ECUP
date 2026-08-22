@@ -19,3 +19,7 @@ def test_launch_job_uses_synchronous_streaming(monkeypatch) -> None:
 def test_job_id_parser_ignores_project_and_operation_ids() -> None:
     output = "project bt1project operation bt1operation created job `bt1actualjob`"
     assert datasphere_runner.extract_job_id(output) == "bt1actualjob"
+
+
+def test_resolve_pre_run_sha_honors_explicit_value() -> None:
+    assert datasphere_runner.resolve_pre_run_sha("abc123") == "abc123"

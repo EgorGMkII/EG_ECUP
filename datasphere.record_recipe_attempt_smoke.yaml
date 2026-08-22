@@ -1,0 +1,24 @@
+name: ozon-record-recipe-attempt-smoke
+desc: GPU, CatBoost and FP16 memmap gate for the isolated record-recipe attempt; no training or inference.
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/record_recipe_attempt.py --smoke --output-dir artifacts/record_recipe_attempt_smoke
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - data/snapshots/
+      - sample_submit.csv
+      - submission_specialized_hurdle_joint_rmsle.csv
+      - test_specialists_raw_predictions_250k.parquet
+      - artifacts/specialized_hurdle/joint_meta_optimization/joint_weights_all_oof_candidate.json
+outputs:
+  - artifacts/record_recipe_attempt_smoke/result_report.json
+cloud-instance-types:
+  - g1.1
