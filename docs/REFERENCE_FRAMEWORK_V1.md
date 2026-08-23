@@ -56,3 +56,6 @@ is used for base pooled datasets.
 The candidate implementations live under `src/reference_framework_v1/candidates/`;
 the thin adapters live in the registry and share the framework's exact-step,
 deterministic-anchor, dynamic-prediction-bank and frozen-meta contracts.
+
+The next experiment phase is governed by
+[`REFERENCE_FRAMEWORK_V1_HYPERPARAMETER_SCREENING.md`](REFERENCE_FRAMEWORK_V1_HYPERPARAMETER_SCREENING.md): sequential 25k screening followed by fresh 100k confirmation, never a Cartesian sweep or Public-LB selection.
