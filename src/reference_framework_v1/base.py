@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import numpy as np
+import polars as pl
 import torch
 
 from src.ssl_temporal_stack_v1.stores import StoreRegistry
@@ -32,6 +33,7 @@ class RunContext:
     root_seed: int
     output_dir: Path
     anchor_tickets: dict[str, int] | None = None
+    raw_events: pl.DataFrame | None = None
 
 
 @dataclass

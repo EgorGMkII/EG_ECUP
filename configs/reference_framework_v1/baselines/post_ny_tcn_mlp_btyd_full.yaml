@@ -34,7 +34,7 @@ models:
     random_strength: 1.0
     border_count: 128
     nan_mode: Min
-    btyd: {enabled: true, penalizer_coef: 0.001, horizon_days: 30}
+    btyd: {enabled: true, penalizer_coef: 0.001, horizon_days: 30, max_fit_users: 50000}
   s1: &gru
     batch_size: 512
     encoder_dropout: 0.2

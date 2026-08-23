@@ -41,10 +41,13 @@ is used for base pooled datasets.
   Residual MLP is an independent tabular React/Churn/Amount adapter. Both are
   created afresh in RUN A and RUN B; neither consumes prediction columns from
   the existing stack.
-- BTYD is a CatBoost-only feature provider. In each run it fits BG/NBD and
-  Gamma-Gamma only on allowed train-anchor frames, then produces causal
-  frequency, recency, age, monetary, alive-probability and 30-day expected
-  purchase/GMV features for CatBoost. It does not read target columns.
+- BTYD follows the accepted `B1_BTYD_ProbCount_ClassifierOnly` contract from
+  `BTYD_LEAKAGE_AUDIT.md`. In each run it builds exact causal full-history RFM
+  from raw events, fits BG/NBD on at most 50k purchasing rows from training
+  anchors only, and exposes exactly `btyd_p_buy_30d`,
+  `btyd_expected_purchases_30d`, and `btyd_p_alive` to CatBoost React/Churn.
+  The sampling is deterministic from the run seed. Amount receives no BTYD
+  feature; Gamma-Gamma is not fitted. Future labels are never feature inputs.
 - `post_ny_tcn_mlp_btyd_full.yaml` and its DataSphere manifest define the
   first all-in six-model candidate. The SSL parity config remains frozen.
 - `experiments/post_ny_ssl_parity_tcn_mlp_btyd_selected_100k.yaml` is the

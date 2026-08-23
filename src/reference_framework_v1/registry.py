@@ -17,7 +17,7 @@ from src.ssl_temporal_stack_v1.runtime import derive_seed, progress
 
 from .base import FirstLevelAdapter, ModelConfig, ModelResult, PredictionSpec, RunContext
 from .candidate_adapters import fit_predict_residual_mlp, fit_predict_tcn
-from .candidates.btyd import BTYDRecipe, LifetimesBTYDFeatureProvider
+from .candidates.btyd import AuditedBTYDClassifierProvider, BTYDRecipe
 
 
 class _SSLConfigShim:
@@ -56,7 +56,7 @@ class CatBoostAdapter(_Adapter):
         if raw["task_type"] != "GPU":
             raise ValueError("Reference CatBoost requires task_type=GPU")
         if "btyd" in raw:
-            if not isinstance(raw["btyd"], Mapping) or set(raw["btyd"]) - {"enabled", "penalizer_coef", "horizon_days"}:
+            if not isinstance(raw["btyd"], Mapping) or set(raw["btyd"]) - {"enabled", "penalizer_coef", "horizon_days", "max_fit_users"}:
                 raise ValueError("Invalid CatBoost BTYD config")
         return super().validate_config(raw)
 
@@ -73,15 +73,27 @@ class CatBoostAdapter(_Adapter):
 
         raw = dict(config.values)
         btyd = raw.pop("btyd")
-        provider = LifetimesBTYDFeatureProvider(BTYDRecipe(penalizer_coef=float(btyd.get("penalizer_coef", 0.001)), horizon_days=int(btyd.get("horizon_days", 30))))
+        if context.raw_events is None:
+            raise RuntimeError("BTYD requires raw causal event history in RunContext")
+        provider = AuditedBTYDClassifierProvider(
+            BTYDRecipe(
+                penalizer_coef=float(btyd.get("penalizer_coef", 0.001)),
+                horizon_days=int(btyd.get("horizon_days", 30)),
+                max_fit_users=int(btyd.get("max_fit_users", 50_000)),
+            ),
+            root_seed=derive_seed(context.root_seed, context.run_name, "btyd_fit"),
+        )
         train_frames = [context.stores.frames.get(anchor) for anchor in context.train_anchors]
-        provider.fit(train_frames)
-        augmented_train = [frame.hstack(provider.transform(frame)) for frame in train_frames]
+        btyd_tables = provider.fit_transform_anchors(context.raw_events, context.users, context.train_anchors, context.holdout_anchor)
+        augmented_train = [frame.join(btyd_tables[anchor], on="user_id", how="left") for anchor, frame in zip(context.train_anchors, train_frames, strict=True)]
         holdout = context.stores.frames.get(context.holdout_anchor)
-        augmented_holdout = holdout.hstack(provider.transform(holdout))
-        features = (*context.stores.frames.feature_names, *provider.feature_names)
+        augmented_holdout = holdout.join(btyd_tables[context.holdout_anchor], on="user_id", how="left")
+        base_features = tuple(context.stores.frames.feature_names)
+        classifier_features = (*base_features, *provider.feature_names)
+        forbidden = {name for name in classifier_features if name in {"will_buy", "will_buy_30d", "future_gmv_30d", "z_target", "target"}}
+        if forbidden:
+            raise RuntimeError(f"Target leakage in CatBoost features: {sorted(forbidden)}")
         pooled = pl.concat(augmented_train)
-        holdout_pool = Pool(augmented_holdout.select(features).to_pandas())
         predictions: dict[str, np.ndarray] = {}
         tasks: dict[str, Any] = {}
         definitions = (
@@ -96,7 +108,9 @@ class CatBoostAdapter(_Adapter):
             params["loss_function"] = loss_function
             progress("CATBOOST_START", run=context.run_name, task=task, rows=subset.height, btyd=True, params=params)
             model = model_class(**params)
-            model.fit(Pool(subset.select(features).to_pandas(), label=target))
+            task_features = classifier_features if task in {"react", "churn"} else base_features
+            model.fit(Pool(subset.select(task_features).to_pandas(), label=target))
+            holdout_pool = Pool(augmented_holdout.select(task_features).to_pandas())
             output = model.predict(holdout_pool, prediction_type="RawFormulaVal") if task != "amount" else np.clip(model.predict(holdout_pool), 0.0, None)
             column = f"cb_{task}_logit" if task != "amount" else "cb_amount_z"
             predictions[column] = np.asarray(output, dtype=np.float64)
@@ -104,7 +118,7 @@ class CatBoostAdapter(_Adapter):
             progress("CATBOOST_DONE", run=context.run_name, task=task, btyd=True, **tasks[task])
             del subset, target, model
             gc.collect()
-        return ModelResult("catboost", predictions, {"catboost_version": catboost_version, "tasks": tasks, "btyd": {"feature_set_id": provider.feature_set_id, "features": list(provider.feature_names), "fit_anchors": list(context.train_anchors)}})
+        return ModelResult("catboost", predictions, {"catboost_version": catboost_version, "tasks": tasks, "btyd": {"feature_set_id": provider.feature_set_id, "classifier_features": list(provider.feature_names), "amount_features": [], "fit_anchors": list(context.train_anchors), "fit_rows": provider.fit_rows, "history": "full causal history through each anchor"}})
 
 
 class GRUAdapter(_Adapter):

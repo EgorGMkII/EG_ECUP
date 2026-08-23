@@ -1,9 +1,12 @@
 import numpy as np
 import torch
 
+from datetime import date
+
 import polars as pl
 
-from src.reference_framework_v1.candidates.btyd import LifetimesBTYDFeatureProvider
+from src.btyd_research_pipeline import extract_full_history_rfm_for_anchor
+from src.reference_framework_v1.candidates.btyd import AuditedBTYDClassifierProvider
 from src.reference_framework_v1.candidates.residual_mlp import ResidualMLPTransitionBase, StreamingFeatureScaler
 from src.reference_framework_v1.candidates.tcn import TCNRecipe, TCNTransitionBase
 
@@ -24,9 +27,18 @@ def test_residual_mlp_and_scaler_are_finite() -> None:
     assert set(result) == {"reactivation_logit", "churn_logit", "amount_z"}
 
 
-def test_btyd_features_are_causal_and_finite() -> None:
-    frame = pl.DataFrame({"purchase_days_90d": [1, 2, 3, 4] * 4, "days_since_last_order": [90, 50, 20, 5] * 4, "available_history_days": [90] * 16, "gmv_sum_90d": [0.0, 100.0, 300.0, 1000.0] * 4, "will_buy": [1] * 16})
-    provider = LifetimesBTYDFeatureProvider().fit([frame])
-    transformed = provider.transform(frame)
-    assert transformed.columns == list(provider.feature_names)
-    assert np.isfinite(transformed.to_numpy()).all()
+def test_btyd_contract_is_audited_classifier_only() -> None:
+    provider = AuditedBTYDClassifierProvider()
+    assert provider.feature_names == ("btyd_p_buy_30d", "btyd_expected_purchases_30d", "btyd_p_alive")
+    assert all("monetary" not in name and "gmv" not in name for name in provider.feature_names)
+
+
+def test_btyd_rfm_does_not_read_events_after_anchor() -> None:
+    raw = pl.DataFrame({
+        "user_id": [1, 1, 1, 2],
+        "event_date": [date(2025, 1, 1), date(2025, 1, 10), date(2025, 2, 1), date(2025, 2, 1)],
+        "gmv": [10.0, 20.0, 9999.0, 9999.0],
+    })
+    rfm = extract_full_history_rfm_for_anchor(raw, [1, 2], date(2025, 1, 15))
+    assert rfm["btyd_n_purchases"].to_list() == [2, 0]
+    assert rfm["btyd_frequency"].to_list() == [1.0, 0.0]

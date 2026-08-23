@@ -93,7 +93,7 @@ def run_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | 
         sampling = config.raw.get("anchor_sampling", {"mode": "uniform"})
         def tickets(anchors: tuple[str, ...]) -> dict[str, int] | None:
             return None if sampling["mode"] == "uniform" else {anchor: int(sampling["tickets"].get(anchor, 1)) for anchor in anchors}
-        a_context = RunContext("RUN_A", config.profile.run_a_anchors, config.profile.meta_anchor, users, stores, device, config.root_seed, config.output_root, tickets(config.profile.run_a_anchors))
+        a_context = RunContext("RUN_A", config.profile.run_a_anchors, config.profile.meta_anchor, users, stores, device, config.root_seed, config.output_root, tickets(config.profile.run_a_anchors), raw)
         a_values, a_report = _fit(a_context, adapters, model_configs, schema)
         a_frame = stores.frames.get(config.profile.meta_anchor)
         a_bank = make_prediction_bank(a_frame, config.profile.meta_anchor, a_values, schema)
@@ -104,7 +104,7 @@ def run_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | 
         write_json(meta_path, package)
         del a_values, a_bank, a_frame
         gc.collect(); torch.cuda.empty_cache()
-        b_context = RunContext("RUN_B", config.profile.run_b_anchors, config.profile.validation_anchor, users, stores, device, config.root_seed, config.output_root, tickets(config.profile.run_b_anchors))
+        b_context = RunContext("RUN_B", config.profile.run_b_anchors, config.profile.validation_anchor, users, stores, device, config.root_seed, config.output_root, tickets(config.profile.run_b_anchors), raw)
         b_values, b_report = _fit(b_context, adapters, model_configs, schema)
         b_frame = stores.frames.get(config.profile.validation_anchor)
         b_bank = make_prediction_bank(b_frame, config.profile.validation_anchor, b_values, schema)
@@ -149,7 +149,7 @@ def run_final(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | None 
     anchors = tuple(sorted(set((*config.profile.final_train_anchors, config.profile.final_inference_anchor))))
     stores = build_store_registry_for_anchors(raw, list(users), store_anchors=anchors, training_anchors=config.profile.final_train_anchors, root=config.output_root / "_work" / "stores", cohort_sha256=sha256_file(config.cohort_path), required_stores=collect_required_stores(adapters))
     try:
-        context = RunContext("FINAL", config.profile.final_train_anchors, config.profile.final_inference_anchor, users, stores, device, config.root_seed, config.output_root)
+        context = RunContext("FINAL", config.profile.final_train_anchors, config.profile.final_inference_anchor, users, stores, device, config.root_seed, config.output_root, None, raw)
         values, report = _fit(context, adapters, model_configs, schema)
         frame = stores.frames.get(config.profile.final_inference_anchor)
         bank = make_prediction_bank(frame, config.profile.final_inference_anchor, values, schema)
