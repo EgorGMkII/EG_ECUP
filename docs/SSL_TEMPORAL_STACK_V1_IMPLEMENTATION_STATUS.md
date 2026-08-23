@@ -10,9 +10,11 @@ baseline or a validation result.
 - Full DataSphere manifest: `datasphere.ssl_temporal_stack_v1_full.yaml`.
 - GPU smoke manifest: `datasphere.ssl_temporal_stack_v1_smoke.yaml`.
 - Local tests: 37 passed on 2026-08-23 in conda environment `myenv`.
-- Full DataSphere job: not launched.
-- GPU DataSphere smoke: not launched.
-- PRE-RUN commit: not created yet.
+- PRE-RUN commit: `3c25ab32af42a5ab85198207aa6dccf3af1fd09e`.
+- GPU DataSphere smoke: job `bt1nnrcov4knb6rrfc83`, `SUCCESS`.
+- Full DataSphere job: job `bt1rsfqtn9jj4e52blom`, `SUCCESS`.
+- Canonical internal validation RMSLE: `1.6811849063362259`.
+- Frozen result record: `docs/RESULT_SSL_TEMPORAL_STACK_V1_2026-08-23.md`.
 
 ## Local 100-user smoke
 
@@ -63,13 +65,12 @@ d5d290f6b75a186cdfc8afdd8abe878c88e52081c2c5007ed9c0a702c6b2f47c
 Failed smoke directories `local_smoke_20260823_v1` and
 `local_smoke_20260823_v2` are forensic failure records and are not results.
 
-## Remaining gates before a full job
+## Completed DataSphere gates
 
-1. Compile, unit tests, YAML parsing, manifest path validation.
-2. Create a PRE-RUN commit containing code, configs, manifests, tests, and docs.
-3. Launch only `datasphere.ssl_temporal_stack_v1_smoke.yaml` through
-   `scripts/datasphere_runner.py` in `myenv`.
-4. Verify real CUDA, CatBoost GPU, AMP, FP16 event memory maps, exact step counts,
-   five downloaded smoke outputs, and live logs.
-5. Only after a successful smoke and explicit authorization, launch the full
-   manifest from the same PRE-RUN SHA.
+The GPU smoke and full job were both launched only through
+`scripts/datasphere_runner.py` in `myenv`. The smoke verified real CUDA,
+CatBoost GPU, FP16 event memory maps, exact tiny-step budgets, live logs, and
+five isolated outputs. The full run then used the same PRE-RUN SHA and returned
+all seven declared outputs. Post-download checks verified every artifact hash,
+100,000-user alignment, finite predictions, six CatBoost GPU tasks, and exact
+requested/completed parity for all 46 neural phases.
