@@ -39,3 +39,8 @@ is used for base pooled datasets.
   CatBoost remains a natural pooled dataset.
 - TCN, Residual MLP and BTYD are future adapters/feature sets; they are not
   part of V1.
+
+The repository includes non-registered, shape-tested skeletons for all three
+under `src/reference_framework_v1/candidates/`. They cannot be enabled through
+`enabled_models` until dedicated adapters, recipes, and temporal experiments
+are added.
