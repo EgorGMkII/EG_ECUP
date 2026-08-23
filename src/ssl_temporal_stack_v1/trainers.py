@@ -27,6 +27,7 @@ from .models import (
     transition_loss,
 )
 from .optimization import StepOptimizer
+from .recipes import NeuralRecipe, OptimizerRecipe
 from .runtime import progress, seed_everything
 from .stores import StoreRegistry
 from .training import (
@@ -38,6 +39,10 @@ from .training import (
 
 
 Pretrainer = S1MaskedPretrainer | S2MultiHorizonPretrainer
+
+
+def _zero_stats() -> TrainingStats:
+    return TrainingStats(0, 0, 0, {}, 0.0, float("nan"))
 
 
 @dataclass
@@ -84,23 +89,25 @@ def fit_gru_pretrainer(
     model_id: str,
     device: torch.device,
     budget: NeuralBudget | None = None,
+    recipe: NeuralRecipe | None = None,
 ) -> tuple[Pretrainer, TrainingStats]:
     if model_id not in {"s1", "s2"}:
         raise ValueError(f"Unknown GRU SSL model: {model_id}")
     budget = budget or EXPERIMENT.budgets[model_id]
     if budget.ssl_steps <= 0:
-        raise ValueError(f"{model_id} requires a positive SSL budget")
+        model = S1MaskedPretrainer(encoder_dropout=recipe.encoder_dropout, head_dropout=recipe.head_dropout) if model_id == "s1" else S2MultiHorizonPretrainer(encoder_dropout=recipe.encoder_dropout, head_dropout=recipe.head_dropout)
+        return model, _zero_stats()
     seed_everything(EXPERIMENT.root_seed, run, model_id, "ssl", "model_init")
-    model: Pretrainer = S1MaskedPretrainer() if model_id == "s1" else S2MultiHorizonPretrainer()
+    encoder_dropout = recipe.encoder_dropout if recipe else 0.2
+    head_dropout = recipe.head_dropout if recipe else 0.2
+    model: Pretrainer = S1MaskedPretrainer(encoder_dropout=encoder_dropout, head_dropout=head_dropout) if model_id == "s1" else S2MultiHorizonPretrainer(encoder_dropout=encoder_dropout, head_dropout=head_dropout)
     model.to(device).train()
     factories = dense_ssl_factories(
         stores, anchors, run=run, model_id=model_id, batch_size=budget.batch_size
     )
-    stream = round_robin_batches(factories)
-    control = StepOptimizer(
-        model.parameters(), total_steps=budget.ssl_steps, learning_rate=1e-3,
-        weight_decay=1e-4, warmup_steps=_warmup_steps(budget.ssl_steps), device=device,
-    )
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    opt = recipe.ssl if recipe else OptimizerRecipe(1e-3, 1e-4, _warmup_steps(budget.ssl_steps))
+    control = StepOptimizer(model.parameters(), total_steps=budget.ssl_steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     progress("TRAIN_START", run=run, model=model_id, stage="ssl", steps=budget.ssl_steps)
 
     def train_step(batch: tuple[torch.Tensor, ...]) -> float:
@@ -142,19 +149,18 @@ def fit_gru_base(
     model_id: str,
     device: torch.device,
     budget: NeuralBudget | None = None,
+    recipe: NeuralRecipe | None = None,
 ) -> BaseFit:
     budget = budget or EXPERIMENT.budgets[model_id]
     seed_everything(EXPERIMENT.root_seed, run, model_id, "base", "heads_init")
     encoder = pretrainer.encoder
-    base = TransitionBase(encoder, lambda x: encoder(x)[1]).to(device).train()
+    base = TransitionBase(encoder, lambda x: encoder(x)[1], head_dropout=recipe.head_dropout if recipe else 0.2).to(device).train()
     factories = dense_base_factories(
         stores, anchors, run=run, model_id=model_id, batch_size=budget.batch_size
     )
-    stream = round_robin_batches(factories)
-    control = StepOptimizer(
-        base.parameters(), total_steps=budget.base_steps, learning_rate=5e-4,
-        weight_decay=1e-4, warmup_steps=_warmup_steps(budget.base_steps), device=device,
-    )
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    opt = recipe.base if recipe else OptimizerRecipe(5e-4, 1e-4, _warmup_steps(budget.base_steps))
+    control = StepOptimizer(base.parameters(), total_steps=budget.base_steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     progress("TRAIN_START", run=run, model=model_id, stage="base", steps=budget.base_steps)
 
     def train_step(batch: tuple[torch.Tensor, ...]) -> float:
@@ -165,7 +171,8 @@ def fit_gru_base(
         active = _to_device(active, device, dtype=torch.float32)
         buy = _to_device(buy, device, dtype=torch.float32)
         with _autocast(device):
-            loss = transition_loss(base(x), z, active, buy)
+            weights = recipe.loss_weights if recipe else None
+            loss = transition_loss(base(x), z, active, buy, **({"factorized_weight": weights.factorized, "direct_amount_weight": weights.direct_amount, "conditional_amount_weight": weights.conditional_amount, "react_weight": weights.react, "churn_weight": weights.churn} if weights else {}))
         control.backward(loss)
         control.finish()
         return float(loss.detach().float().cpu())
@@ -192,16 +199,15 @@ def _fit_dense_specialist_phase(
     learning_rate: float,
     batch_size: int,
     device: torch.device,
+    optimizer_recipe: OptimizerRecipe | None = None,
 ) -> TrainingStats:
     factories = dense_specialist_factories(
         stores, anchors, run=run, model_id=model_id, task=task, phase=phase,
         batch_size=batch_size,
     )
-    stream = round_robin_batches(factories)
-    control = StepOptimizer(
-        model.parameters(), total_steps=steps, learning_rate=learning_rate,
-        weight_decay=1e-4, warmup_steps=0, device=device,
-    )
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    opt = optimizer_recipe or OptimizerRecipe(learning_rate, 1e-4, 0)
+    control = StepOptimizer(model.parameters(), total_steps=steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     model.train()
 
     def train_step(batch: tuple[torch.Tensor, ...]) -> float:
@@ -238,22 +244,25 @@ def fit_gru_specialist(
     task: str,
     device: torch.device,
     budget: NeuralBudget | None = None,
+    recipe: NeuralRecipe | None = None,
+    specialist_recipes: dict[str, tuple[OptimizerRecipe, OptimizerRecipe]] | None = None,
 ) -> SpecialistFit:
     budget = budget or EXPERIMENT.budgets[model_id]
     seed_everything(EXPERIMENT.root_seed, run, model_id, "specialist", task, "model_init")
-    model = Specialist(base.encoder, task, model_id).to(device)
+    model = Specialist(base.encoder, task, model_id, head_dropout=recipe.head_dropout if recipe else 0.2).to(device)
     model.freeze_phase_h()
     progress("TRAIN_START", run=run, model=model_id, stage="H", task=task, steps=budget.specialist_head_steps)
+    task_recipes = specialist_recipes.get(task) if specialist_recipes else None
     h_stats = _fit_dense_specialist_phase(
         model, stores, anchors, run=run, model_id=model_id, task=task, phase="H",
-        steps=budget.specialist_head_steps, learning_rate=1e-3,
+        steps=budget.specialist_head_steps, learning_rate=1e-3, optimizer_recipe=task_recipes[0] if task_recipes else (recipe.specialist_head if recipe else None),
         batch_size=budget.batch_size, device=device,
     )
     model.unfreeze_phase_f()
     progress("TRAIN_START", run=run, model=model_id, stage="F", task=task, steps=budget.specialist_finetune_steps)
     f_stats = _fit_dense_specialist_phase(
         model, stores, anchors, run=run, model_id=model_id, task=task, phase="F",
-        steps=budget.specialist_finetune_steps, learning_rate=1e-4,
+        steps=budget.specialist_finetune_steps, learning_rate=1e-4, optimizer_recipe=task_recipes[1] if task_recipes else (recipe.specialist_finetune if recipe else None),
         batch_size=budget.batch_size, device=device,
     )
     progress("TRAIN_DONE", run=run, model=model_id, stage="specialist", task=task)
@@ -280,18 +289,17 @@ def fit_ett_base(
     budget: NeuralBudget | None = None,
     micro_batch_size: int = 128,
     accumulation_steps: int = 4,
+    recipe: NeuralRecipe | None = None,
 ) -> BaseFit:
     budget = budget or EXPERIMENT.budgets["ett"]
     seed_everything(EXPERIMENT.root_seed, run, "ett", "base", "model_init")
-    model = EventTimeTransformer().to(device).train()
+    model = EventTimeTransformer(transformer_dropout=recipe.transformer_dropout if recipe else 0.1, head_dropout=recipe.head_dropout if recipe else 0.2).to(device).train()
     factories = event_base_factories(
         stores, anchors, run=run, batch_size=micro_batch_size
     )
-    stream = round_robin_batches(factories)
-    control = StepOptimizer(
-        model.parameters(), total_steps=budget.base_steps, learning_rate=3e-4,
-        weight_decay=1e-4, warmup_steps=_warmup_steps(budget.base_steps), device=device,
-    )
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    opt = recipe.base if recipe else OptimizerRecipe(3e-4, 1e-4, _warmup_steps(budget.base_steps))
+    control = StepOptimizer(model.parameters(), total_steps=budget.base_steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     pending = 0
     progress("TRAIN_START", run=run, model="ett", stage="base", steps=budget.base_steps, accumulation=accumulation_steps)
 
@@ -304,7 +312,8 @@ def fit_ett_base(
         active = _to_device(batch[6], device, dtype=torch.float32)
         buy = _to_device(batch[7], device, dtype=torch.float32)
         with _autocast(device):
-            unscaled_loss = transition_loss(model(*inputs), z, active, buy)
+            weights = recipe.loss_weights if recipe else None
+            unscaled_loss = transition_loss(model(*inputs), z, active, buy, **({"factorized_weight": weights.factorized, "direct_amount_weight": weights.direct_amount, "conditional_amount_weight": weights.conditional_amount, "react_weight": weights.react, "churn_weight": weights.churn} if weights else {}))
             loss = unscaled_loss / divisor
         control.backward(loss)
         pending += 1
@@ -340,15 +349,14 @@ def _fit_ett_specialist_phase(
     device: torch.device,
     micro_batch_size: int,
     accumulation_steps: int,
+    optimizer_recipe: OptimizerRecipe | None = None,
 ) -> TrainingStats:
     factories = event_specialist_factories(
         stores, anchors, run=run, task=task, phase=phase, batch_size=micro_batch_size
     )
-    stream = round_robin_batches(factories)
-    control = StepOptimizer(
-        model.parameters(), total_steps=steps, learning_rate=learning_rate,
-        weight_decay=1e-4, warmup_steps=0, device=device,
-    )
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    opt = optimizer_recipe or OptimizerRecipe(learning_rate, 1e-4, 0)
+    control = StepOptimizer(model.parameters(), total_steps=steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     pending = 0
     model.train()
 
@@ -397,20 +405,23 @@ def fit_ett_specialist(
     budget: NeuralBudget | None = None,
     micro_batch_size: int = 128,
     accumulation_steps: int = 4,
+    recipe: NeuralRecipe | None = None,
+    specialist_recipes: dict[str, tuple[OptimizerRecipe, OptimizerRecipe]] | None = None,
 ) -> SpecialistFit:
     budget = budget or EXPERIMENT.budgets["ett"]
     seed_everything(EXPERIMENT.root_seed, run, "ett", "specialist", task, "model_init")
-    model = Specialist(base, task, "ett").to(device)
+    model = Specialist(base, task, "ett", head_dropout=recipe.head_dropout if recipe else 0.2).to(device)
     model.freeze_phase_h()
+    task_recipes = specialist_recipes.get(task) if specialist_recipes else None
     h_stats = _fit_ett_specialist_phase(
         model, stores, anchors, run=run, task=task, phase="H",
-        steps=budget.specialist_head_steps, learning_rate=1e-3, device=device,
+        steps=budget.specialist_head_steps, learning_rate=1e-3, device=device, optimizer_recipe=task_recipes[0] if task_recipes else (recipe.specialist_head if recipe else None),
         micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps,
     )
     model.unfreeze_phase_f()
     f_stats = _fit_ett_specialist_phase(
         model, stores, anchors, run=run, task=task, phase="F",
-        steps=budget.specialist_finetune_steps, learning_rate=1e-4, device=device,
+        steps=budget.specialist_finetune_steps, learning_rate=1e-4, device=device, optimizer_recipe=task_recipes[1] if task_recipes else (recipe.specialist_finetune if recipe else None),
         micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps,
     )
     progress("TRAIN_DONE", run=run, model="ett", stage="specialist", task=task)

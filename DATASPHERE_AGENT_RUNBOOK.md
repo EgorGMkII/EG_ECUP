@@ -19,6 +19,9 @@
   код и конфигурации; витрина строится на GPU VM.
 - Не объявлять каталог с checkpoint/cache в `outputs`. Выгружать только
   маленькие конечные файлы: manifest, мета-веса, prediction bank и report.
+- Для `reference_framework_v1` сначала построить и проверить immutable
+  cohort manifests; каждый DataSphere job получает один resolved experiment
+  config и один run-scoped output root. Sweep YAML сам jobs не запускает.
 
 ## Gate до создания job
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import gc
 from pathlib import Path
 import time
@@ -18,6 +18,7 @@ from .loaders import make_loader_factory
 from .models import EventTimeTransformer, Specialist, TransitionBase
 from .predictions import AMOUNT_COLUMNS, CHURN_COLUMNS, REACT_COLUMNS
 from .runtime import derive_seed, progress
+from .recipes import NeuralRecipe, OptimizerRecipe
 from .stores import StoreRegistry
 from .trainers import (
     fit_ett_base,
@@ -200,13 +201,15 @@ def fit_predict_gru(
     device: torch.device,
     checkpoint_root: Path,
     budget: NeuralBudget | None = None,
+    recipe: NeuralRecipe | None = None,
+    specialist_recipes: dict[str, tuple[OptimizerRecipe, OptimizerRecipe]] | None = None,
 ) -> AdapterResult:
     budget = budget or EXPERIMENT.budgets[model_id]
     pretrainer, ssl_stats = fit_gru_pretrainer(
-        stores, anchors, run=run, model_id=model_id, device=device, budget=budget
+        stores, anchors, run=run, model_id=model_id, device=device, budget=budget, recipe=recipe
     )
     base_fit = fit_gru_base(
-        pretrainer, stores, anchors, run=run, model_id=model_id, device=device, budget=budget
+        pretrainer, stores, anchors, run=run, model_id=model_id, device=device, budget=budget, recipe=recipe
     )
     base = base_fit.model
     assert isinstance(base, TransitionBase)
@@ -221,9 +224,16 @@ def fit_predict_gru(
     predictions: dict[str, np.ndarray] = {}
     specialist_report: dict[str, Any] = {}
     for task in ("react", "churn", "amount"):
+        task_pair = specialist_recipes.get(task) if specialist_recipes else None
+        task_budget = replace(
+            budget,
+            specialist_head_steps=task_pair[0].steps if task_pair else budget.specialist_head_steps,
+            specialist_finetune_steps=task_pair[1].steps if task_pair else budget.specialist_finetune_steps,
+        ) if task_pair else budget
         fit = fit_gru_specialist(
             base, stores, anchors, run=run, model_id=model_id, task=task,
-            device=device, budget=budget,
+            device=device, budget=task_budget, recipe=recipe,
+            specialist_recipes=specialist_recipes,
         )
         values = predict_dense_specialist(fit.model, stores, holdout_anchor, device=device)
         column = f"{model_id}_{task}_logit" if task != "amount" else f"{model_id}_amount_z"
@@ -259,11 +269,13 @@ def fit_predict_ett(
     budget: NeuralBudget | None = None,
     micro_batch_size: int = 128,
     accumulation_steps: int = 4,
+    recipe: NeuralRecipe | None = None,
+    specialist_recipes: dict[str, tuple[OptimizerRecipe, OptimizerRecipe]] | None = None,
 ) -> AdapterResult:
     budget = budget or EXPERIMENT.budgets["ett"]
     base_fit = fit_ett_base(
         stores, anchors, run=run, device=device, budget=budget,
-        micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps,
+        micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps, recipe=recipe,
     )
     base = base_fit.model
     assert isinstance(base, EventTimeTransformer)
@@ -277,9 +289,16 @@ def fit_predict_ett(
     predictions: dict[str, np.ndarray] = {}
     specialist_report: dict[str, Any] = {}
     for task in ("react", "churn", "amount"):
+        task_pair = specialist_recipes.get(task) if specialist_recipes else None
+        task_budget = replace(
+            budget,
+            specialist_head_steps=task_pair[0].steps if task_pair else budget.specialist_head_steps,
+            specialist_finetune_steps=task_pair[1].steps if task_pair else budget.specialist_finetune_steps,
+        ) if task_pair else budget
         fit = fit_ett_specialist(
-            base, stores, anchors, run=run, task=task, device=device, budget=budget,
-            micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps,
+            base, stores, anchors, run=run, task=task, device=device, budget=task_budget,
+            micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps, recipe=recipe,
+            specialist_recipes=specialist_recipes,
         )
         values = predict_ett_specialist(fit.model, stores, holdout_anchor, device=device)
         column = f"ett_{task}_logit" if task != "amount" else "ett_amount_z"

@@ -1,0 +1,13 @@
+sweep_id: ett_steps_lr_v1
+base_config: configs/reference_framework_v1/baselines/post_ny_full.yaml
+candidates:
+  - id: post_ny_ett_5250_lr3e4_v1
+    overrides:
+      models:
+        ett:
+          base: {steps: 5250, learning_rate: 0.0003, scheduler: cosine, warmup_steps: 525, weight_decay: 0.0001}
+  - id: post_ny_ett_5500_lr3e4_v1
+    overrides:
+      models:
+        ett:
+          base: {steps: 5500, learning_rate: 0.0003, scheduler: cosine, warmup_steps: 550, weight_decay: 0.0001}

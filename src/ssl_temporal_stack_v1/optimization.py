@@ -29,6 +29,7 @@ class StepOptimizer:
         weight_decay: float,
         warmup_steps: int,
         device: torch.device,
+        scheduler: str = "cosine",
         max_grad_norm: float = 1.0,
     ) -> None:
         params = [parameter for parameter in parameters if parameter.requires_grad]
@@ -36,10 +37,13 @@ class StepOptimizer:
             raise ValueError("Optimizer received no trainable parameters")
         if total_steps <= 0 or not 0 <= warmup_steps < total_steps:
             raise ValueError("Invalid total/warmup step contract")
+        if scheduler not in {"constant", "linear", "cosine"}:
+            raise ValueError(f"Unsupported scheduler: {scheduler}")
         self.parameters = params
         self.total_steps = total_steps
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
+        self.scheduler = scheduler
         self.max_grad_norm = max_grad_norm
         self.device = device
         self.optimizer = torch.optim.AdamW(params, lr=learning_rate, weight_decay=weight_decay)
@@ -58,6 +62,10 @@ class StepOptimizer:
             return step_number / self.warmup_steps
         decay_steps = self.total_steps - self.warmup_steps
         decay_position = step_number - self.warmup_steps
+        if self.scheduler == "constant":
+            return 1.0
+        if self.scheduler == "linear":
+            return max(0.0, 1.0 - decay_position / decay_steps)
         return 0.5 * (1.0 + math.cos(math.pi * decay_position / decay_steps))
 
     def prepare(self) -> None:

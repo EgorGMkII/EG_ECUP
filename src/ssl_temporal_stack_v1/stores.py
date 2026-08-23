@@ -400,12 +400,13 @@ def build_event_memmap_store(
 @dataclass
 class StoreRegistry:
     frames: FeatureFrameStore
-    daily: DailyTensorStore
-    horizons: HorizonLabelStore
-    events: EventMemmapStore
+    daily: DailyTensorStore | None
+    horizons: HorizonLabelStore | None
+    events: EventMemmapStore | None
 
     def close(self) -> None:
-        self.events.close()
+        if self.events is not None:
+            self.events.close()
 
 
 def build_store_registry(raw: pl.DataFrame, users: list[int], root: Path) -> StoreRegistry:
@@ -427,17 +428,19 @@ def build_store_registry_for_anchors(
     training_anchors: tuple[str, ...],
     root: Path,
     cohort_sha256: str,
+    required_stores: frozenset[str] | None = None,
 ) -> StoreRegistry:
     anchors = tuple(sorted(set(store_anchors)))
     if not set(training_anchors).issubset(anchors):
         raise ValueError("Training anchors must be included in the store union")
     root.mkdir(parents=True, exist_ok=True)
+    required = required_stores or frozenset({"frames", "daily", "horizons", "events"})
+    if "frames" not in required:
+        raise ValueError("Feature frames are required by every current adapter")
     frames = build_feature_frame_store(
         raw, users, anchors, root / "frames", cohort_sha256=cohort_sha256
     )
-    daily = build_daily_tensor_store(raw, users, anchors, root / "daily")
-    horizons = build_horizon_label_store(raw, users, training_anchors, root / "horizons")
-    events = build_event_memmap_store(
-        raw, users, anchors, root / "events", cohort_sha256=cohort_sha256
-    )
+    daily = build_daily_tensor_store(raw, users, anchors, root / "daily") if "daily" in required else None
+    horizons = build_horizon_label_store(raw, users, training_anchors, root / "horizons") if "horizons" in required else None
+    events = build_event_memmap_store(raw, users, anchors, root / "events", cohort_sha256=cohort_sha256) if "events" in required else None
     return StoreRegistry(frames=frames, daily=daily, horizons=horizons, events=events)

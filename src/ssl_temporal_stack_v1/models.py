@@ -25,9 +25,9 @@ class TemporalAttention(nn.Module):
 class GRUBackbone(nn.Module):
     implementation_id = "gru_2x128_daily180x15_attention_v1"
 
-    def __init__(self) -> None:
+    def __init__(self, dropout: float = 0.2) -> None:
         super().__init__()
-        self.gru = nn.GRU(15, 128, num_layers=2, batch_first=True, dropout=0.2)
+        self.gru = nn.GRU(15, 128, num_layers=2, batch_first=True, dropout=dropout)
         self.attention = TemporalAttention(128)
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
@@ -35,18 +35,18 @@ class GRUBackbone(nn.Module):
         return sequence, self.attention(sequence)
 
 
-def task_head() -> nn.Sequential:
+def task_head(dropout: float = 0.2) -> nn.Sequential:
     return nn.Sequential(
-        nn.Linear(128, 64), nn.GELU(), nn.Dropout(0.2), nn.Linear(64, 1)
+        nn.Linear(128, 64), nn.GELU(), nn.Dropout(dropout), nn.Linear(64, 1)
     )
 
 
 class S1MaskedPretrainer(nn.Module):
     implementation_id = "s1_mask20_first12_gru180_attention_v1"
 
-    def __init__(self) -> None:
+    def __init__(self, *, encoder_dropout: float = 0.2, head_dropout: float = 0.2) -> None:
         super().__init__()
-        self.encoder = GRUBackbone()
+        self.encoder = GRUBackbone(encoder_dropout)
         self.reconstruction = nn.Sequential(
             nn.Linear(128, 64), nn.GELU(), nn.Linear(64, 15)
         )
@@ -72,11 +72,11 @@ class S1MaskedPretrainer(nn.Module):
 class S2MultiHorizonPretrainer(nn.Module):
     implementation_id = "s2_buy_gmv_7_14_30_gru180_attention_v1"
 
-    def __init__(self) -> None:
+    def __init__(self, *, encoder_dropout: float = 0.2, head_dropout: float = 0.2) -> None:
         super().__init__()
-        self.encoder = GRUBackbone()
-        self.buy = nn.ModuleList([task_head() for _ in range(3)])
-        self.gmv = nn.ModuleList([task_head() for _ in range(3)])
+        self.encoder = GRUBackbone(encoder_dropout)
+        self.buy = nn.ModuleList([task_head(head_dropout) for _ in range(3)])
+        self.gmv = nn.ModuleList([task_head(head_dropout) for _ in range(3)])
 
     def forward(self, x: Tensor) -> dict[str, Tensor]:
         _, embedding = self.encoder(x)
@@ -111,14 +111,14 @@ class S2MultiHorizonPretrainer(nn.Module):
 class TransitionBase(nn.Module):
     implementation_id = "joint_transition_four_head_v1"
 
-    def __init__(self, encoder: nn.Module, embedding: Callable[[Tensor], Tensor]) -> None:
+    def __init__(self, encoder: nn.Module, embedding: Callable[[Tensor], Tensor], *, head_dropout: float = 0.2) -> None:
         super().__init__()
         self.encoder = encoder
         self._embedding = embedding
-        self.reactivation = task_head()
-        self.churn = task_head()
-        self.direct = task_head()
-        self.conditional = task_head()
+        self.reactivation = task_head(head_dropout)
+        self.churn = task_head(head_dropout)
+        self.direct = task_head(head_dropout)
+        self.conditional = task_head(head_dropout)
 
     def forward(self, x: Tensor) -> dict[str, Tensor]:
         embedding = self._embedding(x)
@@ -135,6 +135,12 @@ def transition_loss(
     z_target: Tensor,
     active: Tensor,
     will_buy: Tensor,
+    *,
+    factorized_weight: float = 1.0,
+    direct_amount_weight: float = 0.25,
+    conditional_amount_weight: float = 0.25,
+    react_weight: float = 0.10,
+    churn_weight: float = 0.10,
 ) -> Tensor:
     p_buy = torch.where(
         active.bool(),
@@ -142,19 +148,19 @@ def transition_loss(
         torch.sigmoid(outputs["reactivation_logit"]),
     )
     factorized = p_buy * torch.clamp(outputs["conditional_z"], min=0)
-    loss = F.mse_loss(factorized, z_target)
-    loss = loss + 0.25 * F.mse_loss(outputs["direct_z"], z_target)
+    loss = factorized_weight * F.mse_loss(factorized, z_target)
+    loss = loss + direct_amount_weight * F.mse_loss(outputs["direct_z"], z_target)
     positive = z_target > 0
     inactive = ~active.bool()
     active_mask = active.bool()
     if positive.any():
-        loss = loss + 0.25 * F.mse_loss(outputs["conditional_z"][positive], z_target[positive])
+        loss = loss + conditional_amount_weight * F.mse_loss(outputs["conditional_z"][positive], z_target[positive])
     if inactive.any():
-        loss = loss + 0.10 * F.binary_cross_entropy_with_logits(
+        loss = loss + react_weight * F.binary_cross_entropy_with_logits(
             outputs["reactivation_logit"][inactive], will_buy[inactive]
         )
     if active_mask.any():
-        loss = loss + 0.10 * F.binary_cross_entropy_with_logits(
+        loss = loss + churn_weight * F.binary_cross_entropy_with_logits(
             outputs["churn_logit"][active_mask], 1 - will_buy[active_mask]
         )
     return loss
@@ -163,20 +169,20 @@ def transition_loss(
 class EventTimeTransformer(nn.Module):
     implementation_id = "ett_2x128_h4_ff512_last_token_v1"
 
-    def __init__(self) -> None:
+    def __init__(self, *, transformer_dropout: float = 0.1, head_dropout: float = 0.2) -> None:
         super().__init__()
         self.content = nn.Linear(12, 128)
         self.time = nn.Linear(12, 128)
         self.rank = nn.Embedding(181, 128)
         self.norm = nn.LayerNorm(128)
         layer = nn.TransformerEncoderLayer(
-            128, 4, 512, 0.1, "gelu", batch_first=True, norm_first=True
+            128, 4, 512, transformer_dropout, "gelu", batch_first=True, norm_first=True
         )
         self.transformer = nn.TransformerEncoder(layer, 2)
-        self.reactivation = task_head()
-        self.churn = task_head()
-        self.direct = task_head()
-        self.conditional = task_head()
+        self.reactivation = task_head(head_dropout)
+        self.churn = task_head(head_dropout)
+        self.direct = task_head(head_dropout)
+        self.conditional = task_head(head_dropout)
 
     def encode(
         self,
@@ -217,7 +223,7 @@ class EventTimeTransformer(nn.Module):
 class Specialist(nn.Module):
     implementation_id = "copied_encoder_fresh_task_head_v1"
 
-    def __init__(self, encoder: nn.Module, task: str, kind: str) -> None:
+    def __init__(self, encoder: nn.Module, task: str, kind: str, *, head_dropout: float = 0.2) -> None:
         super().__init__()
         if task not in {"react", "churn", "amount"}:
             raise ValueError(f"Unknown specialist task: {task}")
@@ -226,7 +232,7 @@ class Specialist(nn.Module):
         self.encoder = copy.deepcopy(encoder)
         self.task = task
         self.kind = kind
-        self.head = task_head()
+        self.head = task_head(head_dropout)
 
     def freeze_phase_h(self) -> None:
         for parameter in self.encoder.parameters():

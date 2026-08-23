@@ -33,6 +33,7 @@ BatchFactory = Callable[[int], Iterator[tuple[Batch, int]]]
 
 def round_robin_batches(
     factories: Mapping[str, BatchFactory[Batch]],
+    tickets: Mapping[str, int] | None = None,
 ) -> Iterator[AnchoredBatch[Batch]]:
     """Yield one batch per anchor in stable order, recreating exhausted iterators.
 
@@ -43,10 +44,27 @@ def round_robin_batches(
     if not factories:
         raise ValueError("At least one anchor batch factory is required")
     anchors = tuple(factories)
+    if tickets is None:
+        schedule = anchors
+    else:
+        if set(tickets) != set(anchors) or any(not isinstance(value, int) or value <= 0 for value in tickets.values()):
+            raise ValueError("Anchor tickets must be positive integers for every anchor")
+        # Smooth weighted round robin creates a deterministic, interleaved
+        # cycle without changing rows inside any anchor dataset.
+        current = {anchor: 0 for anchor in anchors}
+        total = sum(tickets.values())
+        ordered: list[str] = []
+        for _ in range(total):
+            for anchor in anchors:
+                current[anchor] += tickets[anchor]
+            selected = max(anchors, key=lambda anchor: (current[anchor], -anchors.index(anchor)))
+            current[selected] -= total
+            ordered.append(selected)
+        schedule = tuple(ordered)
     cycles = {anchor: 0 for anchor in anchors}
     iterators = {anchor: iter(factories[anchor](0)) for anchor in anchors}
     while True:
-        for anchor in anchors:
+        for anchor in schedule:
             try:
                 value, examples = next(iterators[anchor])
             except StopIteration:
