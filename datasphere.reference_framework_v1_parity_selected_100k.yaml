@@ -1,0 +1,35 @@
+name: ozon-reference-framework-v1-parity-selected-100k
+desc: Parity validation of config-driven framework against SSL_TEMPORAL_STACK_V1 selected 100k baseline.
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/run_reference_experiment.py --experiment-config configs/reference_framework_v1/baselines/post_ny_ssl_parity_selected_100k.yaml --pre-run-sha __PRE_RUN_SHA__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+  - selected_users_100k.parquet
+outputs:
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/run_manifest.json
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/resolved_config.yaml
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/model_training_report.json
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/run_a_meta_prediction_bank.parquet
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/frozen_meta_package.json
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/run_b_validation_prediction_bank.parquet
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/validation_report.json
+  - artifacts/reference_v1/experiments/post_ny_ssl_parity_selected_100k_v1/artifact_sha256.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s
