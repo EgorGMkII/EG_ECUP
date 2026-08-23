@@ -21,3 +21,11 @@ def test_baseline_config_is_strictly_loadable() -> None:
 def test_extended_candidate_config_is_strictly_loadable() -> None:
     config = load_experiment_config(Path("configs/reference_framework_v1/baselines/post_ny_tcn_mlp_btyd_full.yaml"))
     assert config.enabled_models == ("catboost", "s1", "s2", "ett", "tcn", "residual_mlp")
+
+
+def test_candidate_adapters_accept_shared_loss_weights_injection() -> None:
+    config = load_experiment_config(Path("configs/reference_framework_v1/experiments/post_ny_ssl_parity_tcn_mlp_btyd_selected_100k.yaml"))
+    for adapter in build_adapters(("tcn", "residual_mlp")):
+        values = dict(config.raw["models"][adapter.model_id])
+        values["loss_weights"] = config.raw["loss_weights"]
+        adapter.validate_config(values)

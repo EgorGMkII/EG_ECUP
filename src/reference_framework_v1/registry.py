@@ -172,7 +172,7 @@ class TCNAdapter(_Adapter):
     prediction_spec = PredictionSpec("tcn", "tcn_react_logit", "tcn_churn_logit", None)
 
     def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
-        allowed = {"batch_size", "channels", "dropout", "head_dropout", "ssl", "base", "specialists"}
+        allowed = {"batch_size", "channels", "dropout", "head_dropout", "ssl", "base", "specialists", "loss_weights"}
         if set(raw) - allowed or not {"batch_size", "base", "specialists"} <= set(raw):
             raise ValueError("Invalid TCN config")
         if raw.get("ssl", "disabled") != "disabled":
@@ -197,7 +197,7 @@ class ResidualMLPAdapter(_Adapter):
     prediction_spec = PredictionSpec("residual_mlp", "mlp_react_logit", "mlp_churn_logit", "mlp_amount_z")
 
     def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
-        allowed = {"batch_size", "hidden", "blocks", "dropout", "head_dropout", "ssl", "base", "specialists"}
+        allowed = {"batch_size", "hidden", "blocks", "dropout", "head_dropout", "ssl", "base", "specialists", "loss_weights"}
         if set(raw) - allowed or not {"batch_size", "base", "specialists"} <= set(raw):
             raise ValueError("Invalid Residual MLP config")
         if raw.get("ssl", "disabled") != "disabled":
