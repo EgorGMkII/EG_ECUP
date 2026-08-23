@@ -10,7 +10,7 @@ env:
     local-paths:
       - src/
       - scripts/
-      - configs/ssl_temporal_stack_v1/
+      - configs/
       - requirements-datasphere.txt
       - data/train.parquet
       - selected_users_100k.parquet
