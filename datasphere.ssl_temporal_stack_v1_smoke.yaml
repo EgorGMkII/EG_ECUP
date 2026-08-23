@@ -24,7 +24,7 @@ cloud-instance-types:
   - g1.1
 working-storage:
   type: SSD
-  size: 20Gb
+  size: 100Gb
 graceful-shutdown:
   signal: SIGTERM
   timeout: 30s
