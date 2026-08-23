@@ -7,12 +7,17 @@ from src.reference_framework_v1.registry import build_adapters, collect_required
 
 
 def test_registry_preserves_config_order_and_store_union() -> None:
-    adapters = build_adapters(("ett", "catboost"))
-    assert [adapter.model_id for adapter in adapters] == ["ett", "catboost"]
-    assert collect_required_stores(adapters) == frozenset({"frames", "events"})
+    adapters = build_adapters(("ett", "tcn", "residual_mlp", "catboost"))
+    assert [adapter.model_id for adapter in adapters] == ["ett", "tcn", "residual_mlp", "catboost"]
+    assert collect_required_stores(adapters) == frozenset({"frames", "daily", "events"})
 
 
 def test_baseline_config_is_strictly_loadable() -> None:
     config = load_experiment_config(Path("configs/reference_framework_v1/baselines/post_ny_full.yaml"))
     assert config.stage == "full"
     assert config.enabled_models == ("catboost", "s1", "s2", "ett")
+
+
+def test_extended_candidate_config_is_strictly_loadable() -> None:
+    config = load_experiment_config(Path("configs/reference_framework_v1/baselines/post_ny_tcn_mlp_btyd_full.yaml"))
+    assert config.enabled_models == ("catboost", "s1", "s2", "ett", "tcn", "residual_mlp")

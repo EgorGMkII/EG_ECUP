@@ -14,7 +14,7 @@ from .profiles import TemporalProfile, get_profile
 
 
 STAGES = frozenset({"screen", "full", "final"})
-MODEL_IDS = frozenset({"catboost", "s1", "s2", "ett"})
+MODEL_IDS = frozenset({"catboost", "s1", "s2", "ett", "tcn", "residual_mlp"})
 
 
 @dataclass(frozen=True)

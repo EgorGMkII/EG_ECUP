@@ -1,0 +1,35 @@
+name: ozon-reference-framework-v1-tcn-mlp-btyd-full
+desc: Full POST_NY_PUBLIC_PROXY reference-framework stack with causal BTYD CatBoost features, TCN and Residual MLP.
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/run_reference_experiment.py --experiment-config configs/reference_framework_v1/baselines/post_ny_tcn_mlp_btyd_full.yaml --pre-run-sha __PRE_RUN_SHA__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+  - artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/full_cohort_100k.parquet
+outputs:
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/run_manifest.json
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/resolved_config.yaml
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/model_training_report.json
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/run_a_meta_prediction_bank.parquet
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/frozen_meta_package.json
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/run_b_validation_prediction_bank.parquet
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/validation_report.json
+  - artifacts/reference_v1/experiments/post_ny_tcn_mlp_btyd_full_v1/artifact_sha256.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

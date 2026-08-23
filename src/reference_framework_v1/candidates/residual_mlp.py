@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 
 import numpy as np
@@ -50,6 +51,11 @@ class StreamingFeatureScaler:
         result = (np.asarray(values, dtype=np.float32) - self.mean.astype(np.float32)) / scale.astype(np.float32)
         return np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -8.0, 8.0)
 
+    def report(self) -> dict[str, object]:
+        if self.mean is None or self.m2 is None:
+            raise RuntimeError("Scaler is not fitted")
+        return {"count": self.count, "mean": self.mean.astype(float).tolist(), "scale": np.sqrt(np.maximum(self.m2 / self.count, 1e-12)).astype(float).tolist()}
+
 
 class ResidualMLPBlock(nn.Module):
     def __init__(self, hidden: int, dropout: float) -> None:
@@ -74,8 +80,42 @@ class ResidualMLPTransitionBase(nn.Module):
         self.churn = nn.Linear(128, 1)
         self.amount = nn.Linear(128, 1)
 
-    def forward(self, features: Tensor) -> dict[str, Tensor]:
+    def encode(self, features: Tensor) -> Tensor:
         if features.ndim != 2 or features.shape[1] != self.recipe.input_features:
             raise ValueError("Expected [batch, 374] tabular features")
-        representation = nn.functional.gelu(self.embedding(self.blocks(self.input(features))))
+        return nn.functional.gelu(self.embedding(self.blocks(self.input(features))))
+
+    def forward(self, features: Tensor) -> dict[str, Tensor]:
+        representation = self.encode(features)
         return {"reactivation_logit": self.reactivation(representation).squeeze(-1), "churn_logit": self.churn(representation).squeeze(-1), "amount_z": self.amount(representation).squeeze(-1)}
+
+
+class ResidualMLPSpecialist(nn.Module):
+    """Task-specific head with a fresh copy of the MLP base representation."""
+
+    def __init__(self, base: ResidualMLPTransitionBase, task: str, dropout: float) -> None:
+        super().__init__()
+        if task not in {"react", "churn", "amount"}:
+            raise ValueError("Unknown Residual MLP specialist task")
+        self.task = task
+        self.input = copy.deepcopy(base.input)
+        self.blocks = copy.deepcopy(base.blocks)
+        self.embedding = copy.deepcopy(base.embedding)
+        self.head = nn.Sequential(nn.Linear(128, 64), nn.GELU(), nn.Dropout(dropout), nn.Linear(64, 1))
+
+    def freeze_phase_h(self) -> None:
+        for module in (self.input, self.blocks, self.embedding):
+            for parameter in module.parameters():
+                parameter.requires_grad = False
+
+    def unfreeze_phase_f(self) -> None:
+        for parameter in list(self.blocks.children())[-2:]:
+            for value in parameter.parameters():
+                value.requires_grad = True
+        for module in (self.embedding,):
+            for parameter in module.parameters():
+                parameter.requires_grad = True
+
+    def forward(self, features: Tensor) -> Tensor:
+        representation = nn.functional.gelu(self.embedding(self.blocks(self.input(features))))
+        return self.head(representation).squeeze(-1)

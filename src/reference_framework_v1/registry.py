@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import gc
 from dataclasses import dataclass
+import time
 from typing import Any, Mapping
 
-from src.ssl_temporal_stack_v1.adapters import fit_predict_catboost, fit_predict_ett, fit_predict_gru
+import numpy as np
+import polars as pl
+
+from src.ssl_temporal_stack_v1.adapters import fit_predict_catboost, fit_predict_ett, fit_predict_gru, resolved_catboost_params
 from src.ssl_temporal_stack_v1.contract import NeuralBudget
 from src.ssl_temporal_stack_v1.recipes import LossWeights, NeuralRecipe, OptimizerRecipe
+from src.ssl_temporal_stack_v1.runtime import derive_seed, progress
 
 from .base import FirstLevelAdapter, ModelConfig, ModelResult, PredictionSpec, RunContext
+from .candidate_adapters import fit_predict_residual_mlp, fit_predict_tcn
+from .candidates.btyd import BTYDRecipe, LifetimesBTYDFeatureProvider
 
 
 class _SSLConfigShim:
@@ -43,15 +51,60 @@ class CatBoostAdapter(_Adapter):
 
     def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
         required = {"iterations", "learning_rate", "depth", "l2_leaf_reg", "task_type", "devices", "boosting_type", "grow_policy", "bootstrap_type", "bagging_temperature", "random_strength", "border_count", "nan_mode"}
-        if set(raw) != required:
+        if set(raw) - (required | {"btyd"}) or not required <= set(raw):
             raise ValueError("CatBoost config has missing or unknown fields")
         if raw["task_type"] != "GPU":
             raise ValueError("Reference CatBoost requires task_type=GPU")
+        if "btyd" in raw:
+            if not isinstance(raw["btyd"], Mapping) or set(raw["btyd"]) - {"enabled", "penalizer_coef", "horizon_days"}:
+                raise ValueError("Invalid CatBoost BTYD config")
         return super().validate_config(raw)
 
     def fit_predict(self, context: RunContext, config: ModelConfig) -> ModelResult:
-        result = fit_predict_catboost(context.stores, context.train_anchors, context.holdout_anchor, run=context.run_name, config=_SSLConfigShim({"catboost": dict(config.values)}))
+        if not config.values.get("btyd", {}).get("enabled", False):
+            result = fit_predict_catboost(context.stores, context.train_anchors, context.holdout_anchor, run=context.run_name, config=_SSLConfigShim({"catboost": dict(config.values)}))
+            return ModelResult(result.model_id, result.predictions, result.training_report)
+        result = self._fit_with_btyd(context, config)
         return ModelResult(result.model_id, result.predictions, result.training_report)
+
+    @staticmethod
+    def _fit_with_btyd(context: RunContext, config: ModelConfig) -> ModelResult:
+        from catboost import CatBoostClassifier, CatBoostRegressor, Pool, __version__ as catboost_version
+
+        raw = dict(config.values)
+        btyd = raw.pop("btyd")
+        provider = LifetimesBTYDFeatureProvider(BTYDRecipe(penalizer_coef=float(btyd.get("penalizer_coef", 0.001)), horizon_days=int(btyd.get("horizon_days", 30))))
+        train_frames = [context.stores.frames.get(anchor) for anchor in context.train_anchors]
+        provider.fit(train_frames)
+        augmented_train = [frame.hstack(provider.transform(frame)) for frame in train_frames]
+        holdout = context.stores.frames.get(context.holdout_anchor)
+        augmented_holdout = holdout.hstack(provider.transform(holdout))
+        features = (*context.stores.frames.feature_names, *provider.feature_names)
+        pooled = pl.concat(augmented_train)
+        holdout_pool = Pool(augmented_holdout.select(features).to_pandas())
+        predictions: dict[str, np.ndarray] = {}
+        tasks: dict[str, Any] = {}
+        definitions = (
+            ("react", pooled["was_active"].to_numpy() == 0, pooled["will_buy"].to_numpy(), CatBoostClassifier, "Logloss"),
+            ("churn", pooled["was_active"].to_numpy() == 1, 1 - pooled["will_buy"].to_numpy(), CatBoostClassifier, "Logloss"),
+            ("amount", pooled["future_gmv_30d"].to_numpy() > 0, pooled["z_target"].to_numpy(), CatBoostRegressor, "RMSE"),
+        )
+        for task, mask, full_target, model_class, loss_function in definitions:
+            started = time.perf_counter()
+            subset, target = pooled.filter(pl.Series(mask)), np.asarray(full_target)[mask]
+            params = resolved_catboost_params(_SSLConfigShim({"catboost": raw}), seed=derive_seed(context.root_seed, context.run_name, "catboost_btyd", task))
+            params["loss_function"] = loss_function
+            progress("CATBOOST_START", run=context.run_name, task=task, rows=subset.height, btyd=True, params=params)
+            model = model_class(**params)
+            model.fit(Pool(subset.select(features).to_pandas(), label=target))
+            output = model.predict(holdout_pool, prediction_type="RawFormulaVal") if task != "amount" else np.clip(model.predict(holdout_pool), 0.0, None)
+            column = f"cb_{task}_logit" if task != "amount" else "cb_amount_z"
+            predictions[column] = np.asarray(output, dtype=np.float64)
+            tasks[task] = {"rows": subset.height, "elapsed_seconds": time.perf_counter() - started, "tree_count": int(model.tree_count_), "resolved_parameters": model.get_all_params()}
+            progress("CATBOOST_DONE", run=context.run_name, task=task, btyd=True, **tasks[task])
+            del subset, target, model
+            gc.collect()
+        return ModelResult("catboost", predictions, {"catboost_version": catboost_version, "tasks": tasks, "btyd": {"feature_set_id": provider.feature_set_id, "features": list(provider.feature_names), "fit_anchors": list(context.train_anchors)}})
 
 
 class GRUAdapter(_Adapter):
@@ -113,7 +166,53 @@ class ETTAdapter(_Adapter):
         return ModelResult(result.model_id, result.predictions, {**result.training_report, "resolved_recipe": dict(values)})
 
 
-MODEL_REGISTRY = {"catboost": CatBoostAdapter, "s1": lambda: GRUAdapter("s1"), "s2": lambda: GRUAdapter("s2"), "ett": ETTAdapter}
+class TCNAdapter(_Adapter):
+    model_id = "tcn"
+    required_stores = frozenset({"frames", "daily"})
+    prediction_spec = PredictionSpec("tcn", "tcn_react_logit", "tcn_churn_logit", None)
+
+    def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
+        allowed = {"batch_size", "channels", "dropout", "head_dropout", "base", "specialists"}
+        if set(raw) - allowed or not {"batch_size", "base", "specialists"} <= set(raw):
+            raise ValueError("Invalid TCN config")
+        _stage(raw["base"], "tcn.base")
+        if set(raw["specialists"]) != {"react", "churn"}:
+            raise ValueError("TCN must configure React and Churn only")
+        for task in ("react", "churn"):
+            if set(raw["specialists"][task]) != {"H", "F"}:
+                raise ValueError(f"Invalid TCN specialist phases for {task}")
+            _stage(raw["specialists"][task]["H"], f"tcn.{task}.H")
+            _stage(raw["specialists"][task]["F"], f"tcn.{task}.F")
+        return super().validate_config(raw)
+
+    def fit_predict(self, context: RunContext, config: ModelConfig) -> ModelResult:
+        return fit_predict_tcn(context, dict(config.values))
+
+
+class ResidualMLPAdapter(_Adapter):
+    model_id = "residual_mlp"
+    required_stores = frozenset({"frames"})
+    prediction_spec = PredictionSpec("residual_mlp", "mlp_react_logit", "mlp_churn_logit", "mlp_amount_z")
+
+    def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
+        allowed = {"batch_size", "hidden", "blocks", "dropout", "head_dropout", "base", "specialists"}
+        if set(raw) - allowed or not {"batch_size", "base", "specialists"} <= set(raw):
+            raise ValueError("Invalid Residual MLP config")
+        _stage(raw["base"], "residual_mlp.base")
+        if set(raw["specialists"]) != {"react", "churn", "amount"}:
+            raise ValueError("Residual MLP must configure all specialists")
+        for task in ("react", "churn", "amount"):
+            if set(raw["specialists"][task]) != {"H", "F"}:
+                raise ValueError(f"Invalid Residual MLP specialist phases for {task}")
+            _stage(raw["specialists"][task]["H"], f"residual_mlp.{task}.H")
+            _stage(raw["specialists"][task]["F"], f"residual_mlp.{task}.F")
+        return super().validate_config(raw)
+
+    def fit_predict(self, context: RunContext, config: ModelConfig) -> ModelResult:
+        return fit_predict_residual_mlp(context, dict(config.values))
+
+
+MODEL_REGISTRY = {"catboost": CatBoostAdapter, "s1": lambda: GRUAdapter("s1"), "s2": lambda: GRUAdapter("s2"), "ett": ETTAdapter, "tcn": TCNAdapter, "residual_mlp": ResidualMLPAdapter}
 
 
 def _optimizer(raw: Mapping[str, Any]) -> OptimizerRecipe:

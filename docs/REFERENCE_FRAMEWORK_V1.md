@@ -13,7 +13,7 @@ python scripts/expand_reference_sweep.py --sweep <sweep.yaml> --output-dir <conf
 ```
 
 Each experiment YAML enables a canonical ordered subset of `catboost`, `s1`,
-`s2`, and `ett`. The generated prediction schema and schema-v2 joint meta use
+`s2`, `ett`, `tcn`, and `residual_mlp`. The generated prediction schema and schema-v2 joint meta use
 the enabled models' named output columns. RUN A fits meta only at M; RUN B is
 fresh and applies only the frozen RUN A package at V.
 
@@ -37,10 +37,17 @@ is used for base pooled datasets.
   automatically from M or V.
 - Anchor recency tickets only affect deterministic neural anchor scheduling.
   CatBoost remains a natural pooled dataset.
-- TCN, Residual MLP and BTYD are future adapters/feature sets; they are not
-  part of V1.
+- TCN is an independent causal 180-day daily-tensor React/Churn adapter.
+  Residual MLP is an independent tabular React/Churn/Amount adapter. Both are
+  created afresh in RUN A and RUN B; neither consumes prediction columns from
+  the existing stack.
+- BTYD is a CatBoost-only feature provider. In each run it fits BG/NBD and
+  Gamma-Gamma only on allowed train-anchor frames, then produces causal
+  frequency, recency, age, monetary, alive-probability and 30-day expected
+  purchase/GMV features for CatBoost. It does not read target columns.
+- `post_ny_tcn_mlp_btyd_full.yaml` and its DataSphere manifest define the
+  first all-in six-model candidate. The SSL parity config remains frozen.
 
-The repository includes non-registered, shape-tested skeletons for all three
-under `src/reference_framework_v1/candidates/`. They cannot be enabled through
-`enabled_models` until dedicated adapters, recipes, and temporal experiments
-are added.
+The candidate implementations live under `src/reference_framework_v1/candidates/`;
+the thin adapters live in the registry and share the framework's exact-step,
+deterministic-anchor, dynamic-prediction-bank and frozen-meta contracts.
