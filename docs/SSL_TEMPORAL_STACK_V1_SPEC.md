@@ -213,7 +213,9 @@ sin_dow, cos_dow, normalized_position
 - Binary/calendar/position channels are not standardized.
 - No additional sequence scaler is fitted in V1.
 - On-disk dtype: float32 NPY memory map, matching the existing builder.
-- Device compute: AMP float16 with float32 losses and GradScaler.
+- Device compute: AMP float16 with float32 losses and GradScaler. On V100 the
+  phase-local scaler starts at `128` and does not grow within a phase; any
+  overflow is a hard failure rather than a silently skipped optimizer update.
 
 S2 SSL targets are future GMV sums at horizons 7, 14, and 30 days. For each
 horizon it uses `buy_h = 1[gmv_h > 0]` and `gmv_z_h = log1p(gmv_h)`.

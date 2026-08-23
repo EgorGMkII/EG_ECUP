@@ -9,6 +9,14 @@ import torch
 from torch import Tensor, nn
 
 
+# The V100 smoke showed that PyTorch's default 2**16 scale overflows the first
+# GRU transition backward even when the float32 loss is finite.  Keep a
+# conservative, phase-local scale and disable growth within the exact-step
+# budget: an overflow must remain a hard failure, never a silently skipped
+# optimizer update.
+AMP_INITIAL_SCALE = 128.0
+
+
 class StepOptimizer:
     """Own one exact optimizer schedule and reject skipped AMP updates."""
 
@@ -36,7 +44,12 @@ class StepOptimizer:
         self.device = device
         self.optimizer = torch.optim.AdamW(params, lr=learning_rate, weight_decay=weight_decay)
         self.amp_enabled = device.type == "cuda"
-        self.scaler = torch.amp.GradScaler("cuda", enabled=self.amp_enabled)
+        self.scaler = torch.amp.GradScaler(
+            "cuda",
+            enabled=self.amp_enabled,
+            init_scale=AMP_INITIAL_SCALE,
+            growth_interval=total_steps + 1,
+        )
         self.completed_steps = 0
         self._prepared = False
 
@@ -72,7 +85,9 @@ class StepOptimizer:
         self.scaler.unscale_(self.optimizer)
         norm = torch.nn.utils.clip_grad_norm_(self.parameters, self.max_grad_norm)
         if not torch.isfinite(norm):
-            raise RuntimeError("Non-finite gradient norm")
+            raise RuntimeError(
+                f"Non-finite gradient norm at AMP scale {self.scaler.get_scale():g}"
+            )
         previous_scale = self.scaler.get_scale()
         self.scaler.step(self.optimizer)
         self.scaler.update()
