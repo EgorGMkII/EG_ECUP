@@ -1,0 +1,89 @@
+experiment_id: SSL_TEMPORAL_STACK_V1
+root_seed: 42
+profile: POST_NY_PUBLIC_PROXY_REDUCED_ANCHORS
+cohort:
+  path: selected_users_100k.parquet
+  rows: 100000
+  sha256: d618e98744302eeec7352b6dc2f2db4f1b127298f1b84b6918304cf3368c4fd2
+train:
+  path: data/train.parquet
+run_a:
+  anchors:
+    - '2025-06-23'
+    - '2025-07-07'
+    - '2025-07-21'
+    - '2025-08-04'
+    - '2025-08-18'
+    - '2025-09-01'
+    - '2025-09-15'
+    - '2025-09-29'
+    - '2025-10-13'
+    - '2025-10-27'
+    - '2025-11-10'
+  holdout_anchor: '2025-12-15'
+run_b:
+  anchors:
+    - '2025-06-23'
+    - '2025-07-07'
+    - '2025-07-21'
+    - '2025-08-04'
+    - '2025-08-18'
+    - '2025-09-01'
+    - '2025-09-15'
+    - '2025-09-29'
+    - '2025-10-13'
+    - '2025-10-27'
+    - '2025-11-10'
+    - '2025-11-24'
+    - '2025-12-08'
+    - '2025-12-15'
+  holdout_anchor: '2026-01-14'
+models:
+  order: [catboost, s1, s2, ett]
+  catboost:
+    iterations: 1500
+    learning_rate: 0.04
+    depth: 6
+    l2_leaf_reg: 6.0
+    task_type: GPU
+    devices: '0'
+    boosting_type: Plain
+    grow_policy: SymmetricTree
+    bootstrap_type: Bayesian
+    bagging_temperature: 1.0
+    random_strength: 1.0
+    border_count: 128
+    nan_mode: Min
+  s1:
+    ssl_steps: 750
+    base_steps: 2000
+    specialist_head_steps: 400
+    specialist_finetune_steps: 600
+    batch_size: 512
+  s2:
+    ssl_steps: 750
+    base_steps: 2000
+    specialist_head_steps: 400
+    specialist_finetune_steps: 600
+    batch_size: 512
+  ett:
+    ssl_steps: 0
+    base_steps: 3500
+    specialist_head_steps: 400
+    specialist_finetune_steps: 600
+    effective_batch_size: 512
+    micro_batch_size: 128
+    accumulation_steps: 4
+meta:
+  optimizer: SLSQP
+  maxiter: 1000
+  ftol: 1.0e-10
+  random_starts: 8
+  alpha: 1.1
+  fit_anchor: '2025-12-15'
+  apply_anchor: '2026-01-14'
+catboost_features:
+  path: configs/ssl_temporal_stack_v1/catboost_feature_order.json
+  count: 374
+  ordered_features_sha256: e54a385cd69665f09063762a2e8581fe953b759004a69180487dfcea3fa8df6e
+output_root: artifacts/ssl_temporal_stack_v1/post_ny_public_proxy

@@ -1,0 +1,30 @@
+name: ozon-ssl-temporal-stack-v1-gpu-smoke
+desc: 100-user GPU/CatBoost/AMP/FP16-memmap smoke for SSL_TEMPORAL_STACK_V1; not a baseline.
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/run_ssl_temporal_stack_v1.py --gpu-smoke --pre-run-sha __PRE_RUN_SHA__ --smoke-output artifacts/ssl_temporal_stack_v1/gpu_smoke
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/ssl_temporal_stack_v1/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - selected_users_100k.parquet
+outputs:
+  - artifacts/ssl_temporal_stack_v1/gpu_smoke/smoke_manifest.json
+  - artifacts/ssl_temporal_stack_v1/gpu_smoke/smoke_training_report.json
+  - artifacts/ssl_temporal_stack_v1/gpu_smoke/smoke_prediction_bank.parquet
+  - artifacts/ssl_temporal_stack_v1/gpu_smoke/smoke_meta_package.json
+  - artifacts/ssl_temporal_stack_v1/gpu_smoke/smoke_report.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 20Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

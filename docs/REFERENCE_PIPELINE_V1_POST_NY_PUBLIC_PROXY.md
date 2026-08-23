@@ -1,7 +1,15 @@
 # REFERENCE_PIPELINE_V1 — POST_NY_PUBLIC_PROXY
 
-This is the active deterministic temporal baseline. It is not an exact
-reconstruction of the historical Public-LB record.
+> **RETIRED / DO NOT LAUNCH.** DataSphere job `bt1e13mh261bcjsot5tn` was
+> cancelled on 2026-08-23 after training-recipe review showed that this code is
+> neither the reproduced Public builder nor a valid continuation of it. Its
+> partial results must not be called a baseline. The implementation and old
+> artifacts are retained only for forensics. The separately specified new SSL
+> experiment is `docs/SSL_TEMPORAL_STACK_V1_SPEC.md`; it also is not a Public
+> builder reproduction.
+
+This was an attempted deterministic temporal pipeline. It is not an exact
+reconstruction of the historical Public-LB record and is no longer active.
 
 RUN A trains on 17 anchors ending `2025-11-10`, fits a frozen meta package on
 M=`2025-12-15`, and uses labels from `2025-12-16` through `2026-01-14`.
