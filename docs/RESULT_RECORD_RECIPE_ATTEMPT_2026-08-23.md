@@ -6,7 +6,9 @@
 - Runtime: 1842.227 seconds
 - GPU: Tesla V100-PCIE-32GB, CUDA 12.1
 - Meta protocol: fixed immutable joint meta; no RUN A/meta fitting
-- Public LB: not submitted
+- Public LB RMSLE: `1.663815381013448`
+- Baseline status: canonical Public-LB baseline for the fixed-meta
+  record-recipe attempt
 
 ## Input hashes
 
@@ -30,6 +32,8 @@ with mean 42.8718371232.
 | raw specialist predictions | `34931007b290d470d50e65bc7e04255e2df3806e8f037021e18f2bc65975549d` |
 | diagnostics | `d560312761681bfa89083627510cbdf7fd807e4e700912ad1a3d3a32685a12ef` |
 
-This is a valid candidate for manual Public LB upload. Its Public RMSLE is
-not knowable locally because test targets are unavailable; the historical
-`1.6640779122` remains the comparison target.
+The candidate was manually submitted to Public LB and scored
+`1.663815381013448`. This is `0.000262531205202` RMSLE better than the
+historical `1.66407791221865`; the difference is small enough to treat this
+run as the canonical Public-LB baseline rather than evidence of a materially
+different model recipe.
