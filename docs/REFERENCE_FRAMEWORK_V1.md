@@ -47,6 +47,11 @@ is used for base pooled datasets.
   purchase/GMV features for CatBoost. It does not read target columns.
 - `post_ny_tcn_mlp_btyd_full.yaml` and its DataSphere manifest define the
   first all-in six-model candidate. The SSL parity config remains frozen.
+- `experiments/post_ny_ssl_parity_tcn_mlp_btyd_selected_100k.yaml` is the
+  launch-ready all-in comparison using the same immutable
+  `selected_users_100k.parquet` as the SSL parity run. It intentionally skips
+  the 25k screen stage and evaluates the six-model stack directly on the
+  established 100k M/V protocol.
 
 The candidate implementations live under `src/reference_framework_v1/candidates/`;
 the thin adapters live in the registry and share the framework's exact-step,
