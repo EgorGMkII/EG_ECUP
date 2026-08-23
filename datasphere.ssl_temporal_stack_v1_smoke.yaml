@@ -12,8 +12,9 @@ env:
       - scripts/
       - configs/
       - requirements-datasphere.txt
-      - data/train.parquet
-      - selected_users_100k.parquet
+inputs:
+  - data/train.parquet
+  - selected_users_100k.parquet
 outputs:
   - artifacts/ssl_temporal_stack_v1/gpu_smoke/smoke_manifest.json
   - artifacts/ssl_temporal_stack_v1/gpu_smoke/smoke_training_report.json
