@@ -1,4 +1,4 @@
-"""Run the new REFERENCE_PIPELINE_V1 PRE_NY_PRIMARY baseline in DataSphere.
+"""Run the new REFERENCE_PIPELINE_V1 POST_NY_PUBLIC_PROXY baseline in DataSphere.
 
 This is intentionally separate from all forensic/historical submission scripts.
 It builds every training frame from raw events inside the job and never writes a
@@ -31,7 +31,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, Subset, TensorDataset
 from sklearn.metrics import log_loss, mean_squared_error, roc_auc_score
 
-from src.reference_pipeline_v1.contract import CHANNELS, COHORT_SHA256, PRE_NY_PRIMARY, anchor_manifest, cohort_sha256, derive_seed, validate_profile
+from src.reference_pipeline_v1.contract import CHANNELS, COHORT_SHA256, POST_NY_PUBLIC_PROXY, anchor_manifest, cohort_sha256, derive_seed, validate_profile
 from src.reference_pipeline_v1.meta import AMOUNT_COLUMNS, CHURN_COLUMNS, REACT_COLUMNS, fit_meta, load_predict
 from src.reference_pipeline_v1.models import EventTimeTransformer, S1MaskedPretrainer, S2MultiHorizonPretrainer, Specialist, TransitionBase, transition_loss
 from src.sequential.dataset import build_user_sequence_tensor
@@ -39,7 +39,8 @@ from src.snapshots import build_snapshot, compute_global_platform_table
 
 
 ROOT = Path(".")
-OUT = Path("artifacts/reference_pipeline_v1/pre_ny_primary")
+ACTIVE_PROFILE = POST_NY_PUBLIC_PROXY
+OUT = Path("artifacts/reference_pipeline_v1/post_ny_public_proxy")
 PREDICTION_COLUMNS = ("user_id", "anchor", "was_active", "will_buy", "future_gmv_30d", "transition", *REACT_COLUMNS, *CHURN_COLUMNS, *AMOUNT_COLUMNS)
 PROCESS_STARTED = time.perf_counter()
 
@@ -427,14 +428,14 @@ def report(bank: pl.DataFrame, z_prediction: np.ndarray, path: Path) -> dict:
 
 
 def run(args: argparse.Namespace) -> None:
-    validate_profile(); OUT.mkdir(parents=True, exist_ok=True)
+    validate_profile(ACTIVE_PROFILE); OUT.mkdir(parents=True, exist_ok=True)
     users_path = Path(args.cohort); actual = cohort_sha256(users_path)
     if actual != COHORT_SHA256: raise RuntimeError(f"Cohort SHA mismatch: {actual}")
     users = pl.read_parquet(users_path)["user_id"].to_list()
     if len(users) != 100_000 or len(set(users)) != 100_000: raise RuntimeError("Cohort must contain 100,000 unique users")
     raw = pl.read_parquet(args.train); cache = OUT / "frames"; cache.mkdir(exist_ok=True)
     if args.smoke:
-        probe_users = users[:100]; probe = labels(raw, probe_users, PRE_NY_PRIMARY.run_a_anchors[0])
+        probe_users = users[:100]; probe = labels(raw, probe_users, ACTIVE_PROFILE.run_a_anchors[0])
         if probe.height != 100 or set(("past_gmv_90d", "future_gmv_30d", "was_active", "will_buy", "z_target")) - set(probe.columns):
             raise RuntimeError("V1 smoke label contract failed")
         event_model = EventTimeTransformer().eval(); empty = torch.ones(2, dtype=torch.bool); values = event_model(torch.zeros(2, 180, 12), torch.zeros(2, 180, 12), torch.zeros(2, 180, dtype=torch.long), torch.ones(2, 180, dtype=torch.bool), empty)
@@ -452,23 +453,23 @@ def run(args: argparse.Namespace) -> None:
         cuda=torch.version.cuda,
         gpu_snapshot=gpu_snapshot(),
     )
-    save_manifest(OUT, PRE_NY_PRIMARY.name)
+    save_manifest(OUT, ACTIVE_PROFILE.name)
     all_anchors = tuple(dict.fromkeys((
-        *PRE_NY_PRIMARY.run_a_anchors,
-        PRE_NY_PRIMARY.meta_anchor,
-        *PRE_NY_PRIMARY.run_b_anchors,
-        PRE_NY_PRIMARY.validation_anchor,
+        *ACTIVE_PROFILE.run_a_anchors,
+        ACTIVE_PROFILE.meta_anchor,
+        *ACTIVE_PROFILE.run_b_anchors,
+        ACTIVE_PROFILE.validation_anchor,
     )))
     progress(
         "ANCHOR_PLAN",
-        run_a_train=list(PRE_NY_PRIMARY.run_a_anchors),
-        meta_anchor=PRE_NY_PRIMARY.meta_anchor,
-        run_b_train=list(PRE_NY_PRIMARY.run_b_anchors),
-        validation_anchor=PRE_NY_PRIMARY.validation_anchor,
+        run_a_train=list(ACTIVE_PROFILE.run_a_anchors),
+        meta_anchor=ACTIVE_PROFILE.meta_anchor,
+        run_b_train=list(ACTIVE_PROFILE.run_b_anchors),
+        validation_anchor=ACTIVE_PROFILE.validation_anchor,
         unique_feature_store_anchors=list(all_anchors),
     )
     frame_paths, features = build_frame_store(raw, users, all_anchors, cache)
-    save_manifest(OUT, PRE_NY_PRIMARY.name, features)
+    save_manifest(OUT, ACTIVE_PROFILE.name, features)
     daily_cache, horizon_cache, event_cache = OUT / "daily_cache", OUT / "horizon_cache", OUT / "event_memmap"
     daily_cache.mkdir(exist_ok=True); horizon_cache.mkdir(exist_ok=True); event_cache.mkdir(exist_ok=True)
     progress("SHARED_SEQUENCE_STORE_START", anchors=len(all_anchors))
@@ -477,7 +478,7 @@ def run(args: argparse.Namespace) -> None:
         daily_values = _daily(raw, users, anchor, daily_cache)
         if isinstance(daily_values, np.memmap): daily_values._mmap.close()
         del daily_values
-    for anchor in PRE_NY_PRIMARY.run_b_anchors:
+    for anchor in ACTIVE_PROFILE.run_b_anchors:
         _horizon_labels(raw, users, anchor, horizon_cache)
     progress("SHARED_SEQUENCE_STORE_DONE", anchors=len(all_anchors))
     del raw
@@ -485,42 +486,42 @@ def run(args: argparse.Namespace) -> None:
     gc.collect()
     progress("RAW_LOG_RELEASED")
 
-    progress("RUN_A_START", train_anchors=len(PRE_NY_PRIMARY.run_a_anchors), meta_anchor=PRE_NY_PRIMARY.meta_anchor)
-    a_train = load_frames(frame_paths, PRE_NY_PRIMARY.run_a_anchors)
-    m_frame = load_frames(frame_paths, (PRE_NY_PRIMARY.meta_anchor,))
+    progress("RUN_A_START", train_anchors=len(ACTIVE_PROFILE.run_a_anchors), meta_anchor=ACTIVE_PROFILE.meta_anchor)
+    a_train = load_frames(frame_paths, ACTIVE_PROFILE.run_a_anchors)
+    m_frame = load_frames(frame_paths, (ACTIVE_PROFILE.meta_anchor,))
     a_predictions = catboost_predictions(a_train, m_frame[0], features, "RUN_A")
     for kind, pretrainer in (("s1", S1MaskedPretrainer()), ("s2", S2MultiHorizonPretrainer())):
-        _pretrain_gru(pretrainer, kind, raw, users, PRE_NY_PRIMARY.run_a_anchors, daily_cache, horizon_cache, device, "RUN_A")
-        base = _base_gru(pretrainer, raw, users, a_train, PRE_NY_PRIMARY.run_a_anchors, daily_cache, device, "RUN_A")
-        gru_specialists = _gru_specialists(base, raw, users, a_train, PRE_NY_PRIMARY.run_a_anchors, daily_cache, device, "RUN_A", kind)
-        a_predictions.update(_gru_predict(gru_specialists, raw, users, PRE_NY_PRIMARY.meta_anchor, daily_cache, device, kind))
+        _pretrain_gru(pretrainer, kind, raw, users, ACTIVE_PROFILE.run_a_anchors, daily_cache, horizon_cache, device, "RUN_A")
+        base = _base_gru(pretrainer, raw, users, a_train, ACTIVE_PROFILE.run_a_anchors, daily_cache, device, "RUN_A")
+        gru_specialists = _gru_specialists(base, raw, users, a_train, ACTIVE_PROFILE.run_a_anchors, daily_cache, device, "RUN_A", kind)
+        a_predictions.update(_gru_predict(gru_specialists, raw, users, ACTIVE_PROFILE.meta_anchor, daily_cache, device, kind))
         del pretrainer, base, gru_specialists
         gc.collect(); torch.cuda.empty_cache()
-    ett = _base_ett(event_store, a_train, PRE_NY_PRIMARY.run_a_anchors, device, "RUN_A")
-    ett_specialists = _ett_specialists(ett, event_store, a_train, PRE_NY_PRIMARY.run_a_anchors, device, "RUN_A")
-    a_predictions.update(_ett_predict(ett_specialists, event_store, PRE_NY_PRIMARY.meta_anchor, device))
-    a_bank = make_bank(m_frame[0], PRE_NY_PRIMARY.meta_anchor, a_predictions); a_path = OUT / "run_a_meta_prediction_bank.parquet"; a_bank.write_parquet(a_path); package = fit_meta(bank_arrays(a_bank), sha(a_path)); (OUT / "frozen_meta_package.json").write_text(json.dumps(package, indent=2), encoding="utf-8")
-    progress("RUN_A_DONE", meta_anchor=PRE_NY_PRIMARY.meta_anchor, meta_rmsle=float(np.sqrt(package["objective"])), prediction_bank=str(a_path), gpu=gpu_snapshot())
+    ett = _base_ett(event_store, a_train, ACTIVE_PROFILE.run_a_anchors, device, "RUN_A")
+    ett_specialists = _ett_specialists(ett, event_store, a_train, ACTIVE_PROFILE.run_a_anchors, device, "RUN_A")
+    a_predictions.update(_ett_predict(ett_specialists, event_store, ACTIVE_PROFILE.meta_anchor, device))
+    a_bank = make_bank(m_frame[0], ACTIVE_PROFILE.meta_anchor, a_predictions); a_path = OUT / "run_a_meta_prediction_bank.parquet"; a_bank.write_parquet(a_path); package = fit_meta(bank_arrays(a_bank), sha(a_path)); (OUT / "frozen_meta_package.json").write_text(json.dumps(package, indent=2), encoding="utf-8")
+    progress("RUN_A_DONE", meta_anchor=ACTIVE_PROFILE.meta_anchor, meta_rmsle=float(np.sqrt(package["objective"])), prediction_bank=str(a_path), gpu=gpu_snapshot())
     del a_train, m_frame, a_predictions, a_bank, ett, ett_specialists
     gc.collect(); torch.cuda.empty_cache()
 
-    progress("RUN_B_START", train_anchors=len(PRE_NY_PRIMARY.run_b_anchors), validation_anchor=PRE_NY_PRIMARY.validation_anchor)
-    b_train = load_frames(frame_paths, PRE_NY_PRIMARY.run_b_anchors)
-    v_frame = load_frames(frame_paths, (PRE_NY_PRIMARY.validation_anchor,))
+    progress("RUN_B_START", train_anchors=len(ACTIVE_PROFILE.run_b_anchors), validation_anchor=ACTIVE_PROFILE.validation_anchor)
+    b_train = load_frames(frame_paths, ACTIVE_PROFILE.run_b_anchors)
+    v_frame = load_frames(frame_paths, (ACTIVE_PROFILE.validation_anchor,))
     b_predictions = catboost_predictions(b_train, v_frame[0], features, "RUN_B")
     for kind, pretrainer in (("s1", S1MaskedPretrainer()), ("s2", S2MultiHorizonPretrainer())):
-        _pretrain_gru(pretrainer, kind, raw, users, PRE_NY_PRIMARY.run_b_anchors, daily_cache, horizon_cache, device, "RUN_B")
-        base = _base_gru(pretrainer, raw, users, b_train, PRE_NY_PRIMARY.run_b_anchors, daily_cache, device, "RUN_B")
-        gru_specialists = _gru_specialists(base, raw, users, b_train, PRE_NY_PRIMARY.run_b_anchors, daily_cache, device, "RUN_B", kind)
-        b_predictions.update(_gru_predict(gru_specialists, raw, users, PRE_NY_PRIMARY.validation_anchor, daily_cache, device, kind))
+        _pretrain_gru(pretrainer, kind, raw, users, ACTIVE_PROFILE.run_b_anchors, daily_cache, horizon_cache, device, "RUN_B")
+        base = _base_gru(pretrainer, raw, users, b_train, ACTIVE_PROFILE.run_b_anchors, daily_cache, device, "RUN_B")
+        gru_specialists = _gru_specialists(base, raw, users, b_train, ACTIVE_PROFILE.run_b_anchors, daily_cache, device, "RUN_B", kind)
+        b_predictions.update(_gru_predict(gru_specialists, raw, users, ACTIVE_PROFILE.validation_anchor, daily_cache, device, kind))
         del pretrainer, base, gru_specialists
         gc.collect(); torch.cuda.empty_cache()
-    ett = _base_ett(event_store, b_train, PRE_NY_PRIMARY.run_b_anchors, device, "RUN_B")
-    ett_specialists = _ett_specialists(ett, event_store, b_train, PRE_NY_PRIMARY.run_b_anchors, device, "RUN_B")
-    b_predictions.update(_ett_predict(ett_specialists, event_store, PRE_NY_PRIMARY.validation_anchor, device))
-    b_bank = make_bank(v_frame[0], PRE_NY_PRIMARY.validation_anchor, b_predictions); b_path = OUT / "run_b_validation_prediction_bank.parquet"; b_bank.write_parquet(b_path); z = load_predict(package, bank_arrays(b_bank)); report(b_bank, z, OUT / "validation_report.json")
+    ett = _base_ett(event_store, b_train, ACTIVE_PROFILE.run_b_anchors, device, "RUN_B")
+    ett_specialists = _ett_specialists(ett, event_store, b_train, ACTIVE_PROFILE.run_b_anchors, device, "RUN_B")
+    b_predictions.update(_ett_predict(ett_specialists, event_store, ACTIVE_PROFILE.validation_anchor, device))
+    b_bank = make_bank(v_frame[0], ACTIVE_PROFILE.validation_anchor, b_predictions); b_path = OUT / "run_b_validation_prediction_bank.parquet"; b_bank.write_parquet(b_path); z = load_predict(package, bank_arrays(b_bank)); report(b_bank, z, OUT / "validation_report.json")
     final_rmsle = float(np.sqrt(np.mean((z - np.log1p(b_bank["future_gmv_30d"].to_numpy())) ** 2)))
-    progress("RUN_B_DONE", validation_anchor=PRE_NY_PRIMARY.validation_anchor, validation_rmsle=final_rmsle, prediction_bank=str(b_path), gpu=gpu_snapshot())
+    progress("RUN_B_DONE", validation_anchor=ACTIVE_PROFILE.validation_anchor, validation_rmsle=final_rmsle, prediction_bank=str(b_path), gpu=gpu_snapshot())
     event_store.close()
     progress("PIPELINE_DONE", validation_rmsle=final_rmsle)
 

@@ -80,7 +80,7 @@ cannot select a submission candidate.
 
 | Profile | M | M target | RUN A anchors | V | V target | RUN B anchors | Purpose |
 | --- | --- | --- | ---: | --- | --- | ---: | --- |
-| `PRE_NY_PRIMARY` | 2025-10-13 | 2025-10-14..2025-11-12 | 12, last 2025-09-01 | 2025-11-24 | 2025-11-25..2025-12-24 | 15, last 2025-10-13 | primary development |
+| `PRE_NY_PRIMARY` | 2025-10-13 | 2025-10-14..2025-11-12 | 12, last 2025-09-01 | 2025-11-24 | 2025-11-25..2025-12-24 | 15, last 2025-10-13 | historical baseline |
 | `NY_CROSSING_STRESS` | 2025-10-27 | 2025-10-28..2025-11-26 | 13, last 2025-09-15 | 2025-12-08 | 2025-12-09..2026-01-07 | 16, last 2025-10-27 | seasonal stress |
 | `POST_NY_PUBLIC_PROXY` | 2025-12-15 | 2025-12-16..2026-01-14 | 17, last 2025-11-10 | 2026-01-14 | 2026-01-15..2026-02-13 | 20, last 2025-12-15 | sealed confirmation |
 
@@ -88,11 +88,11 @@ All selected pairs have no target overlap.  Their M-to-V distances are respectiv
 42, 42, and 30 days.  V is respectively 81, 67, and 30 days before the final test
 anchor `2026-02-13`.
 
-`PRE_NY_PRIMARY` is primary because both targets end before New Year.  It is kept
-separate from `NY_CROSSING_STRESS` because the latter tests a different seasonal
-failure mode; their RMSLE must not be averaged without an explicit business reason.
-`POST_NY_PUBLIC_PROXY` is closest to the final operational timing and therefore
-sealed: it is not an everyday development score.
+`PRE_NY_PRIMARY` remains a historical baseline because both targets end before
+New Year. `POST_NY_PUBLIC_PROXY` is the active reference profile because it is
+closest to the final operational timing; it is treated as sealed rather than an
+everyday tuning score. Its RMSLE must not be averaged with other seasonal profiles
+without an explicit business reason.
 
 Decision structure: a candidate improves primary development; does not show a
 catastrophic seasonal regression; then receives one sealed post-NY confirmation.

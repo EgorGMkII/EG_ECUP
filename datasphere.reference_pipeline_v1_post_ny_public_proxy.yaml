@@ -1,0 +1,32 @@
+name: reference-pipeline-v1-post-ny-public-proxy
+desc: New deterministic REFERENCE_PIPELINE_V1 FULL_TWO_RUN_VALIDATION on the last labelled 30-day window; no submission.
+cmd: >
+  export PYTHONPATH=. ; python3 scripts/run_reference_pipeline_v1.py
+env:
+  vars:
+    - REFERENCE_V1_COMMIT_SHA
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/reference_pipeline_v1/
+inputs:
+  - data/train.parquet
+  - selected_users_100k.parquet
+outputs:
+  - artifacts/reference_pipeline_v1/post_ny_public_proxy/run_manifest.json
+  - artifacts/reference_pipeline_v1/post_ny_public_proxy/frozen_meta_package.json
+  - artifacts/reference_pipeline_v1/post_ny_public_proxy/run_a_meta_prediction_bank.parquet
+  - artifacts/reference_pipeline_v1/post_ny_public_proxy/run_b_validation_prediction_bank.parquet
+  - artifacts/reference_pipeline_v1/post_ny_public_proxy/validation_report.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

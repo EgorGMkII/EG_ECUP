@@ -1,5 +1,5 @@
 # Declarative example only.  It is not a launcher or DataSphere payload.
-experiment_id: reference_pipeline_v1_pre_ny_primary
+experiment_id: reference_pipeline_v1_post_ny_public_proxy
 mode: full_two_run_validation
 cohort:
   path: selected_users_100k.parquet
@@ -10,8 +10,8 @@ semantics:
   history_days: 90
   target_days: 30
 temporal:
-  meta_anchor: '2025-10-13'
-  validation_anchor: '2025-11-24'
+  meta_anchor: '2025-12-15'
+  validation_anchor: '2026-01-14'
   max_labeled_date: '2026-02-13'
   training_anchor_rule: target_end_lte_run_anchor
 models:

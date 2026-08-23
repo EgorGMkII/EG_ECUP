@@ -27,12 +27,12 @@ class Profile:
     validation_anchor: str
 
 
-PRE_NY_PRIMARY = Profile(
-    name="PRE_NY_PRIMARY",
-    run_a_anchors=("2025-03-31", "2025-04-14", "2025-04-28", "2025-05-12", "2025-05-26", "2025-06-09", "2025-06-23", "2025-07-07", "2025-07-21", "2025-08-04", "2025-08-18", "2025-09-01"),
-    meta_anchor="2025-10-13",
-    run_b_anchors=("2025-03-31", "2025-04-14", "2025-04-28", "2025-05-12", "2025-05-26", "2025-06-09", "2025-06-23", "2025-07-07", "2025-07-21", "2025-08-04", "2025-08-18", "2025-09-01", "2025-09-15", "2025-09-29", "2025-10-13"),
-    validation_anchor="2025-11-24",
+POST_NY_PUBLIC_PROXY = Profile(
+    name="POST_NY_PUBLIC_PROXY",
+    run_a_anchors=("2025-03-31", "2025-04-14", "2025-04-28", "2025-05-12", "2025-05-26", "2025-06-09", "2025-06-23", "2025-07-07", "2025-07-21", "2025-08-04", "2025-08-18", "2025-09-01", "2025-09-15", "2025-09-29", "2025-10-13", "2025-10-27", "2025-11-10"),
+    meta_anchor="2025-12-15",
+    run_b_anchors=("2025-03-31", "2025-04-14", "2025-04-28", "2025-05-12", "2025-05-26", "2025-06-09", "2025-06-23", "2025-07-07", "2025-07-21", "2025-08-04", "2025-08-18", "2025-09-01", "2025-09-15", "2025-09-29", "2025-10-13", "2025-10-27", "2025-11-10", "2025-11-24", "2025-12-08", "2025-12-15"),
+    validation_anchor="2026-01-14",
 )
 
 
@@ -63,14 +63,14 @@ def windows(anchor: str) -> dict[str, str]:
     }
 
 
-def validate_profile(profile: Profile = PRE_NY_PRIMARY) -> None:
+def validate_profile(profile: Profile = POST_NY_PUBLIC_PROXY) -> None:
     assert profile.meta_anchor not in profile.run_a_anchors
     assert profile.validation_anchor not in profile.run_b_anchors
-    assert max(date.fromisoformat(windows(x)["model_target_end"]) for x in profile.run_a_anchors) < date.fromisoformat(profile.meta_anchor)
-    assert max(date.fromisoformat(windows(x)["model_target_end"]) for x in profile.run_b_anchors) < date.fromisoformat(profile.validation_anchor)
+    assert max(date.fromisoformat(windows(x)["model_target_end"]) for x in profile.run_a_anchors) <= date.fromisoformat(profile.meta_anchor)
+    assert max(date.fromisoformat(windows(x)["model_target_end"]) for x in profile.run_b_anchors) <= date.fromisoformat(profile.validation_anchor)
 
 
-def anchor_manifest(profile: Profile = PRE_NY_PRIMARY) -> list[dict[str, str]]:
+def anchor_manifest(profile: Profile = POST_NY_PUBLIC_PROXY) -> list[dict[str, str]]:
     validate_profile(profile)
     rows: list[dict[str, str]] = []
     for run, anchors, holdout in (("RUN_A", profile.run_a_anchors, profile.meta_anchor), ("RUN_B", profile.run_b_anchors, profile.validation_anchor)):

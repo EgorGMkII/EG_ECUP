@@ -6,7 +6,7 @@ import numpy as np
 import polars as pl
 import torch
 
-from src.reference_pipeline_v1.contract import PRE_NY_PRIMARY, anchor_manifest, validate_profile, windows
+from src.reference_pipeline_v1.contract import POST_NY_PUBLIC_PROXY, anchor_manifest, validate_profile, windows
 from src.reference_pipeline_v1.meta import fit_meta, load_predict
 from src.reference_pipeline_v1.models import EventTimeTransformer, S1MaskedPretrainer, S2MultiHorizonPretrainer
 from src.sequential.dataset import build_user_sequence_tensor
@@ -14,8 +14,17 @@ from src.sequential.dataset import build_user_sequence_tensor
 
 def test_anchors_and_cutoffs() -> None:
     validate_profile(); rows = anchor_manifest()
-    assert len(rows) == 29
+    assert POST_NY_PUBLIC_PROXY.meta_anchor == "2025-12-15"
+    assert POST_NY_PUBLIC_PROXY.validation_anchor == "2026-01-14"
+    assert len(POST_NY_PUBLIC_PROXY.run_a_anchors) == 17
+    assert len(POST_NY_PUBLIC_PROXY.run_b_anchors) == 20
+    assert len(rows) == 39
     assert windows("2025-03-31")["state_history_start"] == "2025-01-01"
+
+
+def test_final_run_b_target_may_end_on_validation_anchor() -> None:
+    assert windows(POST_NY_PUBLIC_PROXY.run_b_anchors[-1])["model_target_end"] == POST_NY_PUBLIC_PROXY.validation_anchor
+    validate_profile(POST_NY_PUBLIC_PROXY)
 
 
 def test_s1_s2_are_not_equivalent() -> None:
