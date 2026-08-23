@@ -1,0 +1,17 @@
+sweep_id: screen_full_stack_v1
+base_config: configs/reference_framework_v1/baselines/post_ny_tcn_mlp_btyd_full.yaml
+candidates:
+  - id: post_ny_screen_full_stack_reference_v1
+    overrides:
+      stage: screen
+  - id: post_ny_screen_ett_4500_v1
+    overrides:
+      stage: screen
+      models:
+        ett:
+          base:
+            steps: 4500
+            learning_rate: 0.0003
+            scheduler: cosine
+            warmup_steps: 450
+            weight_decay: 0.0001

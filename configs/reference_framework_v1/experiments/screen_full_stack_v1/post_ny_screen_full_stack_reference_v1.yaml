@@ -1,0 +1,246 @@
+experiment_id: post_ny_screen_full_stack_reference_v1
+profile: POST_NY_PUBLIC_PROXY
+stage: screen
+root_seed: 42
+enabled_models:
+- catboost
+- s1
+- s2
+- ett
+- tcn
+- residual_mlp
+output_root: artifacts/reference_v1/experiments/post_ny_screen_full_stack_reference_v1
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+  cohort:
+    screen: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/screen_cohort_25k.parquet
+    full: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/full_cohort_100k.parquet
+    universe: sample_submit.csv
+anchor_sampling:
+  mode: uniform
+loss_weights:
+  factorized: 1.0
+  direct_amount: 0.25
+  conditional_amount: 0.25
+  react: 0.1
+  churn: 0.1
+models:
+  catboost:
+    iterations: 1500
+    learning_rate: 0.04
+    depth: 6
+    l2_leaf_reg: 6.0
+    task_type: GPU
+    devices: '0'
+    boosting_type: Plain
+    grow_policy: SymmetricTree
+    bootstrap_type: Bayesian
+    bagging_temperature: 1.0
+    random_strength: 1.0
+    border_count: 128
+    nan_mode: Min
+    btyd:
+      enabled: true
+      penalizer_coef: 0.001
+      horizon_days: 30
+      max_fit_users: 50000
+  s1: &id001
+    batch_size: 512
+    encoder_dropout: 0.2
+    head_dropout: 0.2
+    ssl:
+      steps: 750
+      learning_rate: 0.001
+      scheduler: cosine
+      warmup_steps: 75
+      weight_decay: 0.0001
+    base:
+      steps: 2000
+      learning_rate: 0.0005
+      scheduler: cosine
+      warmup_steps: 200
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      amount:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+  s2: *id001
+  ett:
+    effective_batch_size: 512
+    micro_batch_size: 128
+    accumulation_steps: 4
+    transformer_dropout: 0.1
+    head_dropout: 0.2
+    base:
+      steps: 3500
+      learning_rate: 0.0003
+      scheduler: cosine
+      warmup_steps: 350
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      amount:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+  tcn:
+    batch_size: 512
+    channels: 128
+    dropout: 0.1
+    head_dropout: 0.1
+    base:
+      steps: 3000
+      learning_rate: 0.0003
+      scheduler: cosine
+      warmup_steps: 300
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 1000
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1500
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 1000
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1500
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+  residual_mlp:
+    batch_size: 4096
+    hidden: 512
+    blocks: 4
+    dropout: 0.1
+    head_dropout: 0.1
+    base:
+      steps: 2000
+      learning_rate: 0.001
+      scheduler: cosine
+      warmup_steps: 200
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 500
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1000
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 500
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1000
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      amount:
+        H:
+          steps: 500
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1000
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
