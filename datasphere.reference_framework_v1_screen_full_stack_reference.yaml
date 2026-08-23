@@ -8,12 +8,7 @@ env:
     version: 3.10.13
     requirements-file: requirements-datasphere.txt
     local-paths:
-      - src/reference_framework_v1/
-      - src/ssl_temporal_stack_v1/
-      - src/sequential/
-      - src/features.py
-      - src/snapshots.py
-      - src/btyd_research_pipeline.py
+      - src/
       - scripts/
       - configs/
       - requirements-datasphere.txt
