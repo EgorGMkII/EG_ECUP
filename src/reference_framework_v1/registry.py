@@ -223,8 +223,8 @@ class TCNAdapter(_Adapter):
         if raw.get("ssl", "disabled") != "disabled":
             raise ValueError("TCN V1 supports only ssl: disabled")
         history_days = int(raw.get("history_days", 180))
-        if history_days < 30 or history_days > 180:
-            raise ValueError("TCN history_days must be in [30, 180]")
+        if history_days < 30 or history_days > 365:
+            raise ValueError("TCN history_days must be in [30, 365]")
         _stage(raw["base"], "tcn.base")
         if set(raw["specialists"]) != {"react", "churn"}:
             raise ValueError("TCN must configure React and Churn only")

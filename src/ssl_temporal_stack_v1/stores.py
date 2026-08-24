@@ -200,19 +200,24 @@ class DailyTensorStore:
     root: Path
     anchors: tuple[str, ...]
     users: int
+    stored_history_days: int = 180
 
     def path(self, anchor: str) -> Path:
         if anchor not in self.anchors:
             raise KeyError(f"Unknown daily anchor: {anchor}")
-        return self.root / f"seq_tensor_{anchor}_u{self.users}_t180.npy"
+        return self.root / f"seq_tensor_{anchor}_u{self.users}_t{self.stored_history_days}.npy"
 
-    def get(self, anchor: str) -> np.memmap:
+    def get(self, anchor: str, history_days: int = 180) -> np.ndarray:
         # Keep the shared daily tensor zero-copy while avoiding PyTorch's
         # read-only-array collate warning for TCN/GRU DataLoader workers.
         values = np.load(self.path(anchor), mmap_mode="r+")
-        if values.shape != (self.users, 180, 15) or values.dtype != np.float32:
+        if values.shape != (self.users, self.stored_history_days, 15) or values.dtype != np.float32:
             raise RuntimeError(f"Invalid dense daily tensor for {anchor}: {values.shape}/{values.dtype}")
-        return values
+        if not 1 <= history_days <= self.stored_history_days:
+            raise ValueError(f"Requested daily history {history_days} is outside [1, {self.stored_history_days}]")
+        # Existing GRU callers use the default 180-day right-aligned view;
+        # longer TCN candidates explicitly request their causal context.
+        return values[:, -history_days:, :]
 
 
 def build_daily_tensor_store(
@@ -220,14 +225,17 @@ def build_daily_tensor_store(
     users: list[int],
     anchors: tuple[str, ...],
     root: Path,
+    history_days: int = 180,
 ) -> DailyTensorStore:
+    if history_days < 180:
+        raise ValueError("Shared daily store must retain the legacy 180-day GRU context")
     root.mkdir(parents=True, exist_ok=True)
     progress("DAILY_STORE_START", anchors=len(anchors), users=len(users))
     for index, anchor in enumerate(anchors, start=1):
         values = build_user_sequence_tensor(
-            raw, users, date.fromisoformat(anchor), seq_len=180, cache_dir=root
+            raw, users, date.fromisoformat(anchor), seq_len=history_days, cache_dir=root
         )
-        if values.shape != (len(users), 180, 15) or values.dtype != np.float32:
+        if values.shape != (len(users), history_days, 15) or values.dtype != np.float32:
             raise RuntimeError(f"Invalid dense daily tensor for {anchor}: {values.shape}/{values.dtype}")
         mmap = getattr(values, "_mmap", None)
         if mmap is not None:
@@ -235,7 +243,7 @@ def build_daily_tensor_store(
         del values
         progress("DAILY_STORE_ANCHOR_DONE", anchor=anchor, index=index, total=len(anchors))
     progress("DAILY_STORE_DONE", anchors=len(anchors), users=len(users))
-    return DailyTensorStore(root, anchors, len(users))
+    return DailyTensorStore(root, anchors, len(users), history_days)
 
 
 @dataclass
@@ -435,6 +443,7 @@ def build_store_registry_for_anchors(
     root: Path,
     cohort_sha256: str,
     required_stores: frozenset[str] | None = None,
+    daily_history_days: int = 180,
 ) -> StoreRegistry:
     anchors = tuple(sorted(set(store_anchors)))
     if not set(training_anchors).issubset(anchors):
@@ -446,7 +455,7 @@ def build_store_registry_for_anchors(
     frames = build_feature_frame_store(
         raw, users, anchors, root / "frames", cohort_sha256=cohort_sha256
     )
-    daily = build_daily_tensor_store(raw, users, anchors, root / "daily") if "daily" in required else None
+    daily = build_daily_tensor_store(raw, users, anchors, root / "daily", history_days=daily_history_days) if "daily" in required else None
     horizons = build_horizon_label_store(raw, users, training_anchors, root / "horizons") if "horizons" in required else None
     events = build_event_memmap_store(raw, users, anchors, root / "events", cohort_sha256=cohort_sha256) if "events" in required else None
     return StoreRegistry(frames=frames, daily=daily, horizons=horizons, events=events)

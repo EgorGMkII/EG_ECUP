@@ -65,13 +65,11 @@ def _dense_factories(
     for anchor in context.train_anchors:
         frame = context.stores.frames.get(anchor)
         if transform is None:
-            values = context.stores.daily.get(anchor)
+            values = context.stores.daily.get(anchor, history_days=history_days or 180)
             if history_days is not None:
                 if values.ndim != 3 or not 1 <= history_days <= values.shape[1]:
                     raise ValueError(f"Invalid causal history_days={history_days} for daily tensor {values.shape}")
                 # The right edge is always the anchor.  This is a view into the
-                # shared 180-day causal store, not a second feature store.
-                values = values[:, -history_days:, :]
         else:
             values = transform(frame.select(context.stores.frames.feature_names).to_numpy())
         active = frame["was_active"].to_numpy().astype(np.float32, copy=False)
@@ -140,12 +138,12 @@ def fit_predict_tcn(context: RunContext, values: dict[str, Any]) -> ModelResult:
             def specialist_loss(batch: tuple[torch.Tensor, ...], candidate=model) -> torch.Tensor:
                 return F.binary_cross_entropy_with_logits(candidate(_to(batch[0], context.device)), _to(batch[1], context.device))
             report["specialists"][task][phase] = asdict(_fit_steps(model=model, factories=factories, steps=int(values["specialists"][task][phase]["steps"]), recipe=values["specialists"][task][phase], device=context.device, run=context.run_name, model_id="tcn", stage=phase, task=task, loss=specialist_loss, tickets=context.anchor_tickets))
-        holdout_daily = context.stores.daily.get(context.holdout_anchor)[:, -history_days:, :]
+        holdout_daily = context.stores.daily.get(context.holdout_anchor, history_days=history_days)
         predictions[f"tcn_{task}_logit"] = _predict(model, holdout_daily, device=context.device, batch_size=batch_size)
         del model
         gc.collect(); torch.cuda.empty_cache()
     del base
-    return ModelResult("tcn", predictions, {**report, "resolved_recipe": values, "history_source": "shared_daily_180d_right_aligned_view", "implementation_id": TCNTransitionBase.implementation_id})
+    return ModelResult("tcn", predictions, {**report, "resolved_recipe": values, "history_source": f"shared_daily_{history_days}d_right_aligned_view", "implementation_id": TCNTransitionBase.implementation_id})
 
 
 def fit_predict_residual_mlp(context: RunContext, values: dict[str, Any]) -> ModelResult:

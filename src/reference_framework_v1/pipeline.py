@@ -69,6 +69,13 @@ def _fit(context: RunContext, adapters, model_configs, schema: PredictionSchema)
     return values, report
 
 
+def _daily_history_requirement(config: ExperimentConfig) -> int:
+    """Largest causal daily view needed by enabled adapters; legacy models stay at 180."""
+    if "tcn" not in config.enabled_models:
+        return 180
+    return max(180, int(config.raw["models"]["tcn"].get("history_days", 180)))
+
+
 def _refuse_existing(root: Path, result_files: tuple[str, ...] = RESULT_FILES) -> None:
     existing = [path for path in (root / name for name in result_files) if path.exists()]
     if existing:
@@ -94,7 +101,7 @@ def run_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | 
         model_configs[adapter.model_id] = adapter.validate_config(values)
     schema = schema_from_specs([adapter.prediction_spec for adapter in adapters])
     anchors = tuple(sorted(set((*config.profile.run_a_anchors, config.profile.meta_anchor, *config.profile.run_b_anchors, config.profile.validation_anchor))))
-    stores = build_store_registry_for_anchors(raw, list(users), store_anchors=anchors, training_anchors=config.profile.run_b_anchors, root=config.output_root / "_work" / "stores", cohort_sha256=inputs["cohort_sha256"], required_stores=collect_required_stores(adapters))
+    stores = build_store_registry_for_anchors(raw, list(users), store_anchors=anchors, training_anchors=config.profile.run_b_anchors, root=config.output_root / "_work" / "stores", cohort_sha256=inputs["cohort_sha256"], required_stores=collect_required_stores(adapters), daily_history_days=_daily_history_requirement(config))
     started = time.perf_counter()
     manifest: dict[str, Any] = {"experiment_id": config.experiment_id, "profile": config.profile.name, "stage": config.stage, "config_sha256": config.sha256, "pre_run_commit_sha": pre_run_sha, "job_id": job_id, "inputs": inputs, "gpu": gpu_info(), "enabled_models": list(config.enabled_models), "prediction_schema": {"react": list(schema.react_columns), "churn": list(schema.churn_columns), "amount": list(schema.amount_columns), "direct": list(schema.direct_columns)}, "required_stores": sorted(collect_required_stores(adapters))}
     write_json(config.output_root / "run_manifest.json", manifest)
@@ -159,7 +166,7 @@ def run_final(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | None 
         model_configs[adapter.model_id] = adapter.validate_config(values)
     schema = schema_from_specs([adapter.prediction_spec for adapter in adapters])
     anchors = tuple(sorted(set((*config.profile.final_train_anchors, config.profile.final_inference_anchor))))
-    stores = build_store_registry_for_anchors(raw, list(users), store_anchors=anchors, training_anchors=config.profile.final_train_anchors, root=config.output_root / "_work" / "stores", cohort_sha256=sha256_file(config.cohort_path), required_stores=collect_required_stores(adapters))
+    stores = build_store_registry_for_anchors(raw, list(users), store_anchors=anchors, training_anchors=config.profile.final_train_anchors, root=config.output_root / "_work" / "stores", cohort_sha256=sha256_file(config.cohort_path), required_stores=collect_required_stores(adapters), daily_history_days=_daily_history_requirement(config))
     started = time.perf_counter()
     manifest: dict[str, Any] = {
         "status": "RUNNING",

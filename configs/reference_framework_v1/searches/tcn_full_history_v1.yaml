@@ -1,0 +1,21 @@
+search_id: tcn_full_history_v1
+# Stage 1: hold the two-epoch recipe and base LR fixed.  The 180-day result is
+# the already recorded incumbent; these candidates test whether a longer causal
+# context adds signal.  365d means every daily event available before anchor,
+# with zero padding only where the raw calendar predates the dataset.
+base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v2.yaml
+target_model: tcn
+stage: screen
+candidates:
+  - id: post_ny_screen_tcn_h270_e2_lr3e4_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 270
+          base: {epochs: 2, learning_rate: 0.0003, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
+  - id: post_ny_screen_tcn_h365_e2_lr3e4_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 365
+          base: {epochs: 2, learning_rate: 0.0003, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}

@@ -1,0 +1,32 @@
+search_id: tcn_wide_lr_v1
+# Stage 2: expand only after selecting history in tcn_full_history_v1.  Update
+# history_days below to that winner before materializing this search.  One job
+# is launched at a time; this is deliberately not an auto-run grid.
+base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v2.yaml
+target_model: tcn
+stage: screen
+candidates:
+  - id: post_ny_screen_tcn_h365_e2_lr5e5_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 365
+          base: {epochs: 2, learning_rate: 0.00005, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
+  - id: post_ny_screen_tcn_h365_e2_lr15e5_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 365
+          base: {epochs: 2, learning_rate: 0.00015, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
+  - id: post_ny_screen_tcn_h365_e2_lr6e4_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 365
+          base: {epochs: 2, learning_rate: 0.0006, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
+  - id: post_ny_screen_tcn_h365_e2_lr12e4_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 365
+          base: {epochs: 2, learning_rate: 0.0012, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
