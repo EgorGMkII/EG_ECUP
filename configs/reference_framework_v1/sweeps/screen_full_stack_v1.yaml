@@ -15,3 +15,14 @@ candidates:
             scheduler: cosine
             warmup_steps: 450
             weight_decay: 0.0001
+  - id: post_ny_screen_ett_5500_v1
+    overrides:
+      stage: screen
+      models:
+        ett:
+          base:
+            steps: 5500
+            learning_rate: 0.0003
+            scheduler: cosine
+            warmup_steps: 550
+            weight_decay: 0.0001
