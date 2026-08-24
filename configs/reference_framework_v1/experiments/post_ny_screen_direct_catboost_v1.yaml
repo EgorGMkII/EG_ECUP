@@ -1,0 +1,29 @@
+# Independent direct log-GMV screen.  This candidate is evaluated both on its
+# own RMSLE and as a late-blend channel appended to the immutable hurdle bank.
+experiment_id: post_ny_screen_direct_catboost_v1
+profile: POST_NY_PUBLIC_PROXY
+stage: screen
+root_seed: 42
+enabled_models: [catboost_direct]
+output_root: artifacts/reference_v1/experiments/post_ny_screen_direct_catboost_v1
+screening: {target_model: catboost_direct}
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+  cohort:
+    screen: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/screen_cohort_25k.parquet
+    full: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/full_cohort_100k.parquet
+    universe: sample_submit.csv
+anchor_sampling: {mode: uniform}
+loss_weights: {factorized: 1.0, direct_amount: 0.25, conditional_amount: 0.25, react: 0.10, churn: 0.10}
+models:
+  catboost_direct:
+    # The external pure-CatBoost champion recipe: direct log1p(GMV), sparse
+    # causal 7/14/30/60/90/180/365-day features, with latest snapshot only.
+    iterations: 300
+    learning_rate: 0.05
+    depth: 8
+    l2_leaf_reg: 5.0
+    task_type: GPU
+    devices: '0'
+    training_anchors: latest
