@@ -10,10 +10,36 @@ import tempfile
 import time
 from pathlib import Path
 
+import yaml
+
 DEFAULT_PROJECT_ID = "bt1pnckp8jvj2ckm20mu"
 DATASPHERE_EXE = r"C:\Users\egorg\anaconda3\envs\myenv\Scripts\datasphere.exe"
 DATASPHERE_PYTHON = r"C:\Users\egorg\anaconda3\envs\myenv\python.exe"
 DATASPHERE_WRAPPER = Path(__file__).with_name("datasphere_cli_wrapper.py")
+
+
+def referenced_experiment_config(config_path: str) -> Path | None:
+    """Return the experiment config referenced by a DataSphere manifest."""
+    path = Path(config_path)
+    if not path.is_file():
+        return None
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("cmd"), str):
+        return None
+    match = re.search(r"--experiment-config\s+([^\s]+)", payload["cmd"])
+    if not match:
+        return None
+    referenced = Path(match.group(1).strip("'\""))
+    return referenced if referenced.is_absolute() else Path.cwd() / referenced
+
+
+def is_final_manifest(config_path: str) -> bool:
+    """Identify final reference jobs so they cannot lose their live stream."""
+    experiment = referenced_experiment_config(config_path)
+    if experiment is None or not experiment.is_file():
+        return False
+    payload = yaml.safe_load(experiment.read_text(encoding="utf-8"))
+    return isinstance(payload, dict) and payload.get("stage") == "final"
 
 
 def datasphere_command(*args: str) -> list[str]:
@@ -144,6 +170,11 @@ def launch_job(
     pre_run_sha: str = None,
     async_submit: bool = False,
 ) -> str:
+    if async_submit and is_final_manifest(config_path):
+        raise ValueError(
+            "Final DataSphere jobs must run synchronously so live stdout/stderr "
+            "and GPU progress are preserved"
+        )
     print(f"[*] Submitting DataSphere Job for config {config_path} in project {project_id}...", flush=True)
     # Synchronous execute is intentional: DataSphere CLI streams remote stdout,
     # stderr, docker stats and GPU stats into its local per-job log directory.

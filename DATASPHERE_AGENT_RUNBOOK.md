@@ -23,6 +23,27 @@
   cohort manifests; каждый DataSphere job получает один resolved experiment
   config и один run-scoped output root. Sweep YAML сам jobs не запускает.
 
+## Финальные 250k submissions
+
+- Финальные jobs запускать только синхронно. `datasphere_runner.py` отклоняет
+  `--async-submit`, если manifest ссылается на experiment со `stage: final`.
+- Два закреплённых варианта запускаются последовательно через
+  `scripts/run_reference_final_pair.py`: сначала без direct CatBoost, после
+  успешного скачивания и проверки 250k CSV — вариант с direct CatBoost.
+- Launcher сохраняет полный локальный transcript каждого synchronous execute в
+  `artifacts/reference_v1/final_pair_runs/<timestamp>/` и не переходит ко
+  второму job при ошибке запуска, скачивания или artifact verifier.
+- Команда подготовки без запуска:
+
+  ```powershell
+  C:\Users\egorg\anaconda3\envs\myenv\python.exe scripts/run_reference_final_pair.py `
+    --pre-run-sha <PRE_RUN_SHA> --dry-run
+  ```
+
+- Реальный запуск отличается только отсутствием `--dry-run`. Не запускать его,
+  пока существуют активные jobs того же назначения или уже загруженные
+  final artifacts в соответствующем output root.
+
 ## Gate до создания job
 
 Все пункты обязательны и выполняются в этом порядке.

@@ -23,3 +23,23 @@ def test_job_id_parser_ignores_project_and_operation_ids() -> None:
 
 def test_resolve_pre_run_sha_honors_explicit_value() -> None:
     assert datasphere_runner.resolve_pre_run_sha("abc123") == "abc123"
+
+
+def test_final_manifest_is_detected() -> None:
+    assert datasphere_runner.is_final_manifest(
+        "datasphere.reference_framework_v1_final_six_model_no_direct_v1.yaml"
+    )
+
+
+def test_final_manifest_rejects_async_submission() -> None:
+    try:
+        datasphere_runner.launch_job(
+            "datasphere.reference_framework_v1_final_six_model_no_direct_v1.yaml",
+            "project-id",
+            "token",
+            async_submit=True,
+        )
+    except ValueError as error:
+        assert "must run synchronously" in str(error)
+    else:
+        raise AssertionError("final manifest unexpectedly accepted --async-submit")
