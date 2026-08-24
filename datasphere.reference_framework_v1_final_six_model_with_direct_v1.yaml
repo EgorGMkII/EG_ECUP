@@ -1,0 +1,36 @@
+name: ozon-reference-v1-final-post_ny_final_six_model_with_direct_v1
+desc: 'Pinned 250k final submission: post_ny_final_six_model_with_direct_v1'
+cmd: export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/run_reference_experiment.py
+  --experiment-config configs/reference_framework_v1/experiments/post_ny_final_six_model_with_direct_v1.yaml
+  --pre-run-sha __PRE_RUN_SHA__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+    - src/
+    - scripts/
+    - configs/
+    - requirements-datasphere.txt
+    - data/train.parquet
+    - sample_submit.csv
+    - artifacts/reference_v1/gates/post_ny_full_direct_catboost_v1/frozen_incremental_meta_package.json
+inputs:
+- data/train.parquet
+- sample_submit.csv
+- artifacts/reference_v1/gates/post_ny_full_direct_catboost_v1/frozen_incremental_meta_package.json
+outputs:
+- artifacts/reference_v1/experiments/post_ny_final_six_model_with_direct_v1/final_manifest.json
+- artifacts/reference_v1/experiments/post_ny_final_six_model_with_direct_v1/resolved_config.yaml
+- artifacts/reference_v1/experiments/post_ny_final_six_model_with_direct_v1/model_training_report.json
+- artifacts/reference_v1/experiments/post_ny_final_six_model_with_direct_v1/submission.csv
+- artifacts/reference_v1/experiments/post_ny_final_six_model_with_direct_v1/artifact_sha256.json
+cloud-instance-types:
+- g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s

@@ -1,0 +1,263 @@
+experiment_id: post_ny_final_six_model_with_direct_v1
+profile: POST_NY_PUBLIC_PROXY
+stage: final
+root_seed: 42
+enabled_models:
+- catboost
+- s1
+- s2
+- ett
+- tcn
+- residual_mlp
+- catboost_direct
+output_root: artifacts/reference_v1/experiments/post_ny_final_six_model_with_direct_v1
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+  cohort:
+    screen: selected_users_100k.parquet
+    full: selected_users_100k.parquet
+    universe: sample_submit.csv
+anchor_sampling:
+  mode: uniform
+loss_weights:
+  factorized: 1.0
+  direct_amount: 0.25
+  conditional_amount: 0.25
+  react: 0.1
+  churn: 0.1
+models:
+  catboost:
+    iterations: 1500
+    learning_rate: 0.04
+    depth: 6
+    l2_leaf_reg: 6.0
+    task_type: GPU
+    devices: '0'
+    boosting_type: Plain
+    grow_policy: SymmetricTree
+    bootstrap_type: Bayesian
+    bagging_temperature: 1.0
+    random_strength: 1.0
+    border_count: 128
+    nan_mode: Min
+    btyd:
+      enabled: true
+      penalizer_coef: 0.001
+      horizon_days: 30
+      max_fit_users: 50000
+  s1: &id001
+    batch_size: 512
+    encoder_dropout: 0.2
+    head_dropout: 0.2
+    ssl:
+      steps: 750
+      learning_rate: 0.001
+      scheduler: cosine
+      warmup_steps: 75
+      weight_decay: 0.0001
+    base:
+      steps: 2000
+      learning_rate: 0.0005
+      scheduler: cosine
+      warmup_steps: 200
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      amount:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+  s2: *id001
+  ett:
+    effective_batch_size: 512
+    micro_batch_size: 128
+    accumulation_steps: 4
+    transformer_dropout: 0.1
+    head_dropout: 0.2
+    base:
+      steps: 3500
+      learning_rate: 0.0003
+      scheduler: cosine
+      warmup_steps: 350
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      amount:
+        H:
+          steps: 400
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 600
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+  tcn:
+    ssl: disabled
+    batch_size: 512
+    channels: 128
+    dropout: 0.1
+    head_dropout: 0.1
+    base:
+      steps: 3000
+      learning_rate: 0.0003
+      scheduler: cosine
+      warmup_steps: 300
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 1000
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1500
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 1000
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1500
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+  residual_mlp:
+    ssl: disabled
+    batch_size: 4096
+    hidden: 512
+    blocks: 4
+    dropout: 0.1
+    head_dropout: 0.1
+    base:
+      steps: 2000
+      learning_rate: 0.001
+      scheduler: cosine
+      warmup_steps: 200
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          steps: 500
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1000
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      churn:
+        H:
+          steps: 500
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1000
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+      amount:
+        H:
+          steps: 500
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+        F:
+          steps: 1000
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_steps: 0
+          weight_decay: 0.0001
+  catboost_direct:
+    # Independent direct channel; final training uses T-30 snapshots for the
+    # final inference anchor and the 100k incremental meta package below.
+    iterations: 300
+    learning_rate: 0.05
+    depth: 8
+    l2_leaf_reg: 5.0
+    task_type: GPU
+    devices: '0'
+    training_anchors: holdout_minus_30d
+final:
+  frozen_meta_path: artifacts/reference_v1/gates/post_ny_full_direct_catboost_v1/frozen_incremental_meta_package.json
+  frozen_meta_sha256: 96e37cf0edc3f326e6d44309be3f98964057eb363a6506fb1bac9458cb96b0d0
+  source_full_config_sha256: 7d88d3a0fbb49d2ac15f9e9339b4b4ed900f812e4a7cbe1496aa6023f461c85c

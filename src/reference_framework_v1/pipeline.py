@@ -26,6 +26,7 @@ from .registry import build_adapters, collect_required_stores
 
 
 RESULT_FILES = ("run_manifest.json", "resolved_config.yaml", "model_training_report.json", "run_a_meta_prediction_bank.parquet", "frozen_meta_package.json", "run_b_validation_prediction_bank.parquet", "validation_report.json", "artifact_sha256.json")
+FINAL_RESULT_FILES = ("final_manifest.json", "resolved_config.yaml", "model_training_report.json", "submission.csv", "artifact_sha256.json")
 
 
 def _load_inputs(config: ExperimentConfig) -> tuple[pl.DataFrame, tuple[int, ...], dict[str, Any]]:
@@ -68,8 +69,8 @@ def _fit(context: RunContext, adapters, model_configs, schema: PredictionSchema)
     return values, report
 
 
-def _refuse_existing(root: Path) -> None:
-    existing = [path for path in (root / name for name in RESULT_FILES) if path.exists()]
+def _refuse_existing(root: Path, result_files: tuple[str, ...] = RESULT_FILES) -> None:
+    existing = [path for path in (root / name for name in result_files) if path.exists()]
     if existing:
         raise FileExistsError(f"Refusing to overwrite result artifacts: {existing}")
     root.mkdir(parents=True, exist_ok=True)
@@ -138,14 +139,17 @@ def run_final(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | None 
     """Train fresh 250k first-level models and emit a template-aligned submission."""
     if config.stage != "final":
         raise ValueError("run_final requires stage=final")
-    _refuse_existing(config.output_root)
+    if len(pre_run_sha) < 7:
+        raise ValueError("PRE-RUN SHA is required")
+    _refuse_existing(config.output_root, FINAL_RESULT_FILES)
     final = config.raw["final"]
     meta_path = Path(final["frozen_meta_path"])
     if sha256_file(meta_path) != final["frozen_meta_sha256"]:
         raise RuntimeError("Pinned frozen meta hash mismatch")
     package = json.loads(meta_path.read_text(encoding="utf-8"))
     device = require_cuda()
-    raw, users, _ = _load_inputs(config)
+    (config.output_root / "resolved_config.yaml").write_text(yaml.safe_dump(resolved_config(config), sort_keys=False), encoding="utf-8")
+    raw, users, inputs = _load_inputs(config)
     adapters = build_adapters(config.enabled_models)
     model_configs = {}
     for adapter in adapters:
@@ -156,6 +160,26 @@ def run_final(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | None 
     schema = schema_from_specs([adapter.prediction_spec for adapter in adapters])
     anchors = tuple(sorted(set((*config.profile.final_train_anchors, config.profile.final_inference_anchor))))
     stores = build_store_registry_for_anchors(raw, list(users), store_anchors=anchors, training_anchors=config.profile.final_train_anchors, root=config.output_root / "_work" / "stores", cohort_sha256=sha256_file(config.cohort_path), required_stores=collect_required_stores(adapters))
+    started = time.perf_counter()
+    manifest: dict[str, Any] = {
+        "status": "RUNNING",
+        "experiment_id": config.experiment_id,
+        "profile": config.profile.name,
+        "stage": config.stage,
+        "config_sha256": config.sha256,
+        "pre_run_commit_sha": pre_run_sha,
+        "job_id": job_id,
+        "inputs": inputs,
+        "gpu": gpu_info(),
+        "enabled_models": list(config.enabled_models),
+        "prediction_schema": {"react": list(schema.react_columns), "churn": list(schema.churn_columns), "amount": list(schema.amount_columns), "direct": list(schema.direct_columns)},
+        "required_stores": sorted(collect_required_stores(adapters)),
+        "final_train_anchors": list(config.profile.final_train_anchors),
+        "final_inference_anchor": config.profile.final_inference_anchor,
+        "frozen_meta_path": meta_path.as_posix(),
+        "frozen_meta_sha256": final["frozen_meta_sha256"],
+    }
+    write_json(config.output_root / "final_manifest.json", manifest)
     try:
         context = RunContext("FINAL", config.profile.final_train_anchors, config.profile.final_inference_anchor, users, stores, device, config.root_seed, config.output_root, None, raw)
         values, report = _fit(context, adapters, model_configs, schema)
@@ -164,11 +188,18 @@ def run_final(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | None 
         prediction = np.expm1(apply_meta(package, bank_arrays(bank, schema), schema))
         template = pl.read_csv(config.sample_submit_path).select("user_id")
         submission = template.with_columns(pl.Series("predict", prediction))
-        if submission.height != 250_000 or not np.isfinite(prediction).all() or (prediction < 0).any():
+        if submission.height != 250_000 or not submission["user_id"].equals(template["user_id"]) or not np.isfinite(prediction).all() or (prediction < 0).any():
             raise RuntimeError("Invalid final submission")
         result = config.output_root / "submission.csv"
         submission.write_csv(result)
         write_json(config.output_root / "model_training_report.json", {"FINAL": report, "pre_run_commit_sha": pre_run_sha, "job_id": job_id})
+        manifest.update({"status": "COMPLETED", "elapsed_seconds": time.perf_counter() - started, "submission_rows": submission.height, "submission_sha256": sha256_file(result), "submission_schema": list(submission.columns)})
+        write_json(config.output_root / "final_manifest.json", manifest)
+        write_json(config.output_root / "artifact_sha256.json", {name: sha256_file(config.output_root / name) for name in FINAL_RESULT_FILES if name != "artifact_sha256.json"})
         return result
+    except Exception as error:
+        manifest.update({"status": "FAILED", "error_type": type(error).__name__, "error": str(error), "elapsed_seconds": time.perf_counter() - started})
+        write_json(config.output_root / "final_manifest.json", manifest)
+        raise
     finally:
         stores.close()
