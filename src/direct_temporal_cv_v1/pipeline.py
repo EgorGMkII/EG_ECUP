@@ -22,6 +22,7 @@ from .features import SparseAggregateFeatureProvider
 from .btyd import DirectBTYDFeatureProvider
 from .metrics import evaluate_z, metrics_dict
 from .registry import build_adapters
+from src.ssl_temporal_stack_v1.stores import build_daily_tensor_store, build_event_memmap_store
 
 
 def _resolve(path: Path) -> Path:
@@ -59,8 +60,11 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
     adapters = build_adapters(config.enabled_models)
     for adapter in adapters:
         adapter.validate_config(config.raw["models"][adapter.model_id])
-    if not config.raw.get("features", {}).get("base_sparse_v1", False):
-        raise ValueError("direct CV currently requires features.base_sparse_v1=true")
+    needs_tabular = any(adapter.requirements.tabular_features for adapter in adapters)
+    needs_daily = any(adapter.requirements.daily_tensor for adapter in adapters)
+    needs_events = any(adapter.requirements.event_sequences for adapter in adapters)
+    if needs_tabular and not config.raw.get("features", {}).get("base_sparse_v1", False):
+        raise ValueError("tabular direct models require features.base_sparse_v1=true")
     use_btyd = bool(config.raw.get("features", {}).get("btyd_v1", False))
     provider = DirectBTYDFeatureProvider() if use_btyd else SparseAggregateFeatureProvider()
     write_yaml(root / "resolved_config.yaml", resolved_config(config))
@@ -80,25 +84,29 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
     all_metrics: list[dict[str, Any]] = []
     for fold in config.folds:
         print(f"[DIRECT_CV] fold={fold.fold_id} feature_build_start anchor={fold.inference_anchor}", flush=True)
-        snapshots = provider.build_pair(raw, users.tolist(), fold.train_anchor, fold.inference_anchor)
+        snapshots = provider.build_pair(raw, users.tolist(), fold.train_anchor, fold.inference_anchor) if needs_tabular else None
         train_z = build_target_z(raw, users.tolist(), fold.train_target_start, fold.train_target_end)
         validation_z = build_target_z(raw, users.tolist(), fold.validation_target_start, fold.validation_target_end)
         fold_dir = root / f"fold_{fold.fold_id}"
         fold_dir.mkdir()
-        write_json(fold_dir / "feature_manifest.json", snapshots.manifest)
+        if snapshots is not None:
+            write_json(fold_dir / "feature_manifest.json", snapshots.manifest)
+        store_root = fold_dir / "stores"
+        daily_store = build_daily_tensor_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "daily") if needs_daily else None
+        event_store = build_event_memmap_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "events") if needs_events else None
         fold_reports: dict[str, Any] = {}
         context_kwargs = {
             "fold": fold,
             "users": users,
             "train_target_z": train_z,
             "validation_target_z": validation_z,
-            "train_tabular": snapshots.train,
-            "validation_tabular": snapshots.validation,
-            "train_daily": None,
-            "validation_daily": None,
-            "train_events": None,
-            "validation_events": None,
-            "device": __import__("torch").device("cpu"),
+            "train_tabular": snapshots.train if snapshots is not None else None,
+            "validation_tabular": snapshots.validation if snapshots is not None else None,
+            "train_daily": daily_store.get(fold.train_anchor.isoformat()) if daily_store is not None else None,
+            "validation_daily": daily_store.get(fold.inference_anchor.isoformat()) if daily_store is not None else None,
+            "train_events": event_store.get(fold.train_anchor.isoformat()) if event_store is not None else None,
+            "validation_events": event_store.get(fold.inference_anchor.isoformat()) if event_store is not None else None,
+            "device": __import__("torch").device("cuda" if __import__("torch").cuda.is_available() else "cpu"),
             "output_dir": fold_dir,
             "root_seed": config.root_seed,
         }
@@ -126,7 +134,9 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
         write_json(fold_dir / "training_report.json", fold_reports)
         write_json(fold_dir / "fold_metrics.json", fold_summary)
         all_metrics.append(fold_summary)
-        del snapshots, context, train_z, validation_z
+        if event_store is not None:
+            event_store.close()
+        del snapshots, context, train_z, validation_z, daily_store, event_store
         gc.collect()
     model_summary: dict[str, Any] = {}
     for model_id in config.enabled_models:

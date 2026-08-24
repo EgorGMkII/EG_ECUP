@@ -10,7 +10,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+import numpy as np
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
+
 from ..base import DirectModelAdapter, FoldContext, FoldPrediction, ModelConfig, ModelRequirements
+from src.ssl_temporal_stack_v1.models import EventTimeTransformer
 
 
 class DirectETTAdapter(DirectModelAdapter):
@@ -32,4 +38,36 @@ class DirectETTAdapter(DirectModelAdapter):
         return ModelConfig(self.model_id, values)
 
     def fit_predict_fold(self, context: FoldContext, config: ModelConfig) -> FoldPrediction:
-        raise NotImplementedError("Direct ETT adapter is prepared but not enabled until its direct scalar-head parity test passes")
+        if context.train_events is None or context.validation_events is None:
+            raise ValueError("ett_direct requires event sequences")
+        device = context.device
+        model = EventTimeTransformer(transformer_dropout=config.values["dropout"], head_dropout=config.values["dropout"]).to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config.values["learning_rate"], weight_decay=config.values["weight_decay"])
+        train_arrays = context.train_events
+        valid_arrays = context.validation_events
+        model.train()
+        batch_size = config.values["batch_size"]
+        for epoch in range(config.values["epochs"]):
+            order = np.arange(len(context.users))
+            rng = np.random.default_rng(context.root_seed + epoch)
+            rng.shuffle(order)
+            for start in range(0, len(order), batch_size):
+                idx = order[start:start + batch_size]
+                inputs = tuple(torch.as_tensor(array[idx], device=device) for array in train_arrays)
+                inputs = (inputs[0].float(), inputs[1].float(), inputs[2].long(), inputs[3].bool(), inputs[4].bool())
+                target = torch.as_tensor(context.train_target_z[idx], device=device).float()
+                prediction = model(*inputs)["direct_z"]
+                loss = nn.functional.mse_loss(prediction, target)
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+        model.eval()
+        predictions: list[np.ndarray] = []
+        with torch.no_grad():
+            for start in range(0, len(context.users), batch_size):
+                idx = slice(start, start + batch_size)
+                inputs = tuple(torch.as_tensor(array[idx], device=device) for array in valid_arrays)
+                inputs = (inputs[0].float(), inputs[1].float(), inputs[2].long(), inputs[3].bool(), inputs[4].bool())
+                predictions.append(model(*inputs)["direct_z"].detach().cpu().numpy())
+        prediction = np.concatenate(predictions).astype(np.float64, copy=False)
+        return FoldPrediction(self.model_id, np.asarray(context.users), prediction, {"model_id": self.model_id, "epochs": config.values["epochs"], "fresh_model_per_fold": True, "direct_target": "log1p_gmv_30d"})
