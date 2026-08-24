@@ -1,0 +1,28 @@
+# Full-cohort confirmation for the standalone direct branch.  It shares the
+# exact selected_users_100k cohort with the completed six-model hurdle run so
+# that the subsequent late-blend comparison is strictly paired.
+experiment_id: post_ny_full_direct_catboost_v1
+profile: POST_NY_PUBLIC_PROXY
+stage: full
+root_seed: 42
+enabled_models: [catboost_direct]
+output_root: artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1
+screening: {target_model: catboost_direct}
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+  cohort:
+    screen: selected_users_100k.parquet
+    full: selected_users_100k.parquet
+    universe: sample_submit.csv
+anchor_sampling: {mode: uniform}
+loss_weights: {factorized: 1.0, direct_amount: 0.25, conditional_amount: 0.25, react: 0.10, churn: 0.10}
+models:
+  catboost_direct:
+    iterations: 300
+    learning_rate: 0.05
+    depth: 8
+    l2_leaf_reg: 5.0
+    task_type: GPU
+    devices: '0'
+    training_anchors: holdout_minus_30d

@@ -1,0 +1,39 @@
+name: ozon-reference-v1-screen-post_ny_full_direct_catboost_v1
+desc: 'Individual catboost_direct screen: post_ny_full_direct_catboost_v1'
+cmd: export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/run_reference_individual_screen.py
+  --experiment-config configs/reference_framework_v1/experiments/post_ny_full_direct_catboost_v1.yaml
+  --output-root artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1
+  --pre-run-sha __PRE_RUN_SHA__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+    - src/
+    - scripts/
+    - configs/
+    - requirements-datasphere.txt
+    - data/train.parquet
+    - sample_submit.csv
+    - selected_users_100k.parquet
+inputs:
+- data/train.parquet
+- sample_submit.csv
+- selected_users_100k.parquet
+outputs:
+- artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1/screen_manifest.json
+- artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1/resolved_config.yaml
+- artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1/run_a_target_prediction_bank.parquet
+- artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1/run_b_target_prediction_bank.parquet
+- artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1/individual_report.json
+- artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1/model_training_report.json
+- artifacts/reference_v1/experiments/post_ny_full_direct_catboost_v1/artifact_sha256.json
+cloud-instance-types:
+- g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s
