@@ -95,7 +95,9 @@ def fit_gru_pretrainer(
         raise ValueError(f"Unknown GRU SSL model: {model_id}")
     budget = budget or EXPERIMENT.budgets[model_id]
     if budget.ssl_steps <= 0:
-        model = S1MaskedPretrainer(encoder_dropout=recipe.encoder_dropout, head_dropout=recipe.head_dropout) if model_id == "s1" else S2MultiHorizonPretrainer(encoder_dropout=recipe.encoder_dropout, head_dropout=recipe.head_dropout)
+        encoder_dropout = recipe.encoder_dropout if recipe else 0.2
+        head_dropout = recipe.head_dropout if recipe else 0.2
+        model = S1MaskedPretrainer(encoder_dropout=encoder_dropout, head_dropout=head_dropout) if model_id == "s1" else S2MultiHorizonPretrainer(encoder_dropout=encoder_dropout, head_dropout=head_dropout)
         return model, _zero_stats()
     seed_everything(EXPERIMENT.root_seed, run, model_id, "ssl", "model_init")
     encoder_dropout = recipe.encoder_dropout if recipe else 0.2
@@ -200,6 +202,7 @@ def _fit_dense_specialist_phase(
     batch_size: int,
     device: torch.device,
     optimizer_recipe: OptimizerRecipe | None = None,
+    recipe: NeuralRecipe | None = None,
 ) -> TrainingStats:
     factories = dense_specialist_factories(
         stores, anchors, run=run, model_id=model_id, task=task, phase=phase,
@@ -256,14 +259,14 @@ def fit_gru_specialist(
     h_stats = _fit_dense_specialist_phase(
         model, stores, anchors, run=run, model_id=model_id, task=task, phase="H",
         steps=budget.specialist_head_steps, learning_rate=1e-3, optimizer_recipe=task_recipes[0] if task_recipes else (recipe.specialist_head if recipe else None),
-        batch_size=budget.batch_size, device=device,
+        batch_size=budget.batch_size, device=device, recipe=recipe,
     )
     model.unfreeze_phase_f()
     progress("TRAIN_START", run=run, model=model_id, stage="F", task=task, steps=budget.specialist_finetune_steps)
     f_stats = _fit_dense_specialist_phase(
         model, stores, anchors, run=run, model_id=model_id, task=task, phase="F",
         steps=budget.specialist_finetune_steps, learning_rate=1e-4, optimizer_recipe=task_recipes[1] if task_recipes else (recipe.specialist_finetune if recipe else None),
-        batch_size=budget.batch_size, device=device,
+        batch_size=budget.batch_size, device=device, recipe=recipe,
     )
     progress("TRAIN_DONE", run=run, model=model_id, stage="specialist", task=task)
     return SpecialistFit(model, {"H": h_stats, "F": f_stats})
@@ -350,6 +353,7 @@ def _fit_ett_specialist_phase(
     micro_batch_size: int,
     accumulation_steps: int,
     optimizer_recipe: OptimizerRecipe | None = None,
+    recipe: NeuralRecipe | None = None,
 ) -> TrainingStats:
     factories = event_specialist_factories(
         stores, anchors, run=run, task=task, phase=phase, batch_size=micro_batch_size
@@ -416,13 +420,13 @@ def fit_ett_specialist(
     h_stats = _fit_ett_specialist_phase(
         model, stores, anchors, run=run, task=task, phase="H",
         steps=budget.specialist_head_steps, learning_rate=1e-3, device=device, optimizer_recipe=task_recipes[0] if task_recipes else (recipe.specialist_head if recipe else None),
-        micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps,
+        micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps, recipe=recipe,
     )
     model.unfreeze_phase_f()
     f_stats = _fit_ett_specialist_phase(
         model, stores, anchors, run=run, task=task, phase="F",
         steps=budget.specialist_finetune_steps, learning_rate=1e-4, device=device, optimizer_recipe=task_recipes[1] if task_recipes else (recipe.specialist_finetune if recipe else None),
-        micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps,
+        micro_batch_size=micro_batch_size, accumulation_steps=accumulation_steps, recipe=recipe,
     )
     progress("TRAIN_DONE", run=run, model="ett", stage="specialist", task=task)
     return SpecialistFit(model, {"H": h_stats, "F": f_stats})

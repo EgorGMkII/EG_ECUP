@@ -1,0 +1,38 @@
+name: ozon-reference-v1-epoch-tuning-screen-baseline-v2
+desc: 25k no-direct immutable epoch baseline retry after specialist-recipe repair.
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ; python3 -u scripts/run_reference_experiment.py --experiment-config configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v2.yaml --pre-run-sha __PRE_RUN_SHA__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - data/train.parquet
+      - sample_submit.csv
+      - artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/screen_cohort_25k.parquet
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+  - artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/screen_cohort_25k.parquet
+outputs:
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/run_manifest.json
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/resolved_config.yaml
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/model_training_report.json
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/run_a_meta_prediction_bank.parquet
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/frozen_meta_package.json
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/run_b_validation_prediction_bank.parquet
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/validation_report.json
+  - artifacts/reference_v1/experiments/post_ny_epoch_tuning_screen_baseline_v2/artifact_sha256.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
+graceful-shutdown:
+  signal: SIGTERM
+  timeout: 30s
