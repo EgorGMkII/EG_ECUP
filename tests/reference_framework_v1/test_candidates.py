@@ -19,6 +19,12 @@ def test_tcn_is_causal_shape_safe_and_reaches_history() -> None:
     assert result["reactivation_logit"].shape == (3,)
 
 
+def test_tcn_accepts_a_right_aligned_shorter_causal_history_view() -> None:
+    model = TCNTransitionBase(TCNRecipe(history_days=90))
+    result = model(torch.zeros(3, 90, 15))
+    assert result["churn_logit"].shape == (3,)
+
+
 def test_residual_mlp_and_scaler_are_finite() -> None:
     scaler = StreamingFeatureScaler().partial_fit(np.ones((4, 374)))
     values = scaler.transform(np.full((2, 374), np.nan))

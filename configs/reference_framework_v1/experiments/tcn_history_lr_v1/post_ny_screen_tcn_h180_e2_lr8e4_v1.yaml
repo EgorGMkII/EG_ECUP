@@ -1,0 +1,251 @@
+experiment_id: post_ny_screen_tcn_h180_e2_lr8e4_v1
+profile: POST_NY_PUBLIC_PROXY
+stage: screen
+root_seed: 42
+enabled_models:
+- catboost
+- s1
+- s2
+- ett
+- tcn
+- residual_mlp
+output_root: artifacts/reference_v1/experiments/post_ny_screen_tcn_h180_e2_lr8e4_v1
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+  cohort:
+    screen: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/screen_cohort_25k.parquet
+    full: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/full_cohort_100k.parquet
+    universe: sample_submit.csv
+anchor_sampling:
+  mode: uniform
+loss_weights:
+  factorized: 1.0
+  direct_amount: 0.25
+  conditional_amount: 0.25
+  react: 0.1
+  churn: 0.1
+models:
+  catboost:
+    iterations: 1500
+    learning_rate: 0.04
+    depth: 6
+    l2_leaf_reg: 6.0
+    task_type: GPU
+    devices: '0'
+    boosting_type: Plain
+    grow_policy: SymmetricTree
+    bootstrap_type: Bayesian
+    bagging_temperature: 1.0
+    random_strength: 1.0
+    border_count: 128
+    nan_mode: Min
+    btyd:
+      enabled: true
+      penalizer_coef: 0.001
+      horizon_days: 30
+      max_fit_users: 50000
+  s1: &id001
+    batch_size: 512
+    encoder_dropout: 0.2
+    head_dropout: 0.2
+    ssl:
+      epochs: 1
+      learning_rate: 0.001
+      scheduler: cosine
+      warmup_fraction: 0.1
+      weight_decay: 0.0001
+    base:
+      epochs: 2
+      learning_rate: 0.0005
+      scheduler: cosine
+      warmup_fraction: 0.1
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+      churn:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+      amount:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+  s2: *id001
+  ett:
+    effective_batch_size: 512
+    micro_batch_size: 128
+    accumulation_steps: 4
+    transformer_dropout: 0.1
+    head_dropout: 0.2
+    base:
+      epochs: 2
+      learning_rate: 0.0003
+      scheduler: cosine
+      warmup_fraction: 0.1
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+      churn:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+      amount:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+  tcn:
+    ssl: disabled
+    batch_size: 512
+    channels: 128
+    dropout: 0.1
+    head_dropout: 0.1
+    base:
+      epochs: 2
+      learning_rate: 0.0008
+      scheduler: cosine
+      warmup_fraction: 0.1
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+      churn:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+    history_days: 180
+  residual_mlp:
+    ssl: disabled
+    batch_size: 4096
+    hidden: 512
+    blocks: 4
+    dropout: 0.1
+    head_dropout: 0.1
+    base:
+      epochs: 2
+      learning_rate: 0.001
+      scheduler: cosine
+      warmup_fraction: 0.1
+      weight_decay: 0.0001
+    specialists:
+      react:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+      churn:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+      amount:
+        H:
+          epochs: 1
+          learning_rate: 0.001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+        F:
+          epochs: 1
+          learning_rate: 0.0001
+          scheduler: cosine
+          warmup_fraction: 0.0
+          weight_decay: 0.0001
+screening:
+  target_model: tcn

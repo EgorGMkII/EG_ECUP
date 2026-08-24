@@ -207,7 +207,9 @@ class DailyTensorStore:
         return self.root / f"seq_tensor_{anchor}_u{self.users}_t180.npy"
 
     def get(self, anchor: str) -> np.memmap:
-        values = np.load(self.path(anchor), mmap_mode="r")
+        # Keep the shared daily tensor zero-copy while avoiding PyTorch's
+        # read-only-array collate warning for TCN/GRU DataLoader workers.
+        values = np.load(self.path(anchor), mmap_mode="r+")
         if values.shape != (self.users, 180, 15) or values.dtype != np.float32:
             raise RuntimeError(f"Invalid dense daily tensor for {anchor}: {values.shape}/{values.dtype}")
         return values

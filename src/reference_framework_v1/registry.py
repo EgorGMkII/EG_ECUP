@@ -217,11 +217,14 @@ class TCNAdapter(_Adapter):
     prediction_spec = PredictionSpec("tcn", "tcn_react_logit", "tcn_churn_logit", None)
 
     def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
-        allowed = {"batch_size", "channels", "dropout", "head_dropout", "ssl", "base", "specialists", "loss_weights"}
+        allowed = {"batch_size", "channels", "dropout", "head_dropout", "history_days", "ssl", "base", "specialists", "loss_weights"}
         if set(raw) - allowed or not {"batch_size", "base", "specialists"} <= set(raw):
             raise ValueError("Invalid TCN config")
         if raw.get("ssl", "disabled") != "disabled":
             raise ValueError("TCN V1 supports only ssl: disabled")
+        history_days = int(raw.get("history_days", 180))
+        if history_days < 30 or history_days > 180:
+            raise ValueError("TCN history_days must be in [30, 180]")
         _stage(raw["base"], "tcn.base")
         if set(raw["specialists"]) != {"react", "churn"}:
             raise ValueError("TCN must configure React and Churn only")
