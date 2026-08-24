@@ -1,5 +1,7 @@
 search_id: tcn_epochs_lr_v1
-base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v1.yaml
+# This must be the immutable 25k baseline that actually produced the banks
+# used by the incremental gates, not the pre-repair v1 preparation config.
+base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v2.yaml
 target_model: tcn
 stage: screen
 candidates:
