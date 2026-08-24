@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .base import DirectModelAdapter, ModelRequirements
+from .adapters.catboost_direct import DirectCatBoostAdapter
 
 
 class _UnimplementedAdapter(DirectModelAdapter):
@@ -20,17 +21,23 @@ class _UnimplementedAdapter(DirectModelAdapter):
 
 
 MODEL_REGISTRY = {
-    "catboost_direct": lambda: _UnimplementedAdapter("catboost_direct", ModelRequirements(tabular_features=True)),
+    "catboost_direct": DirectCatBoostAdapter,
+    # Neural adapters are intentionally still skeletons. Keeping their IDs in
+    # the registry gives config validation a stable extension point without
+    # accidentally launching an incomplete model.
     "ett_direct": lambda: _UnimplementedAdapter("ett_direct", ModelRequirements(event_sequences=True)),
     "tcn_direct": lambda: _UnimplementedAdapter("tcn_direct", ModelRequirements(daily_tensor=True)),
 }
 
 
 def build_adapters(model_ids: tuple[str, ...]) -> list[DirectModelAdapter]:
+    if len(model_ids) != len(set(model_ids)):
+        raise ValueError("enabled direct model IDs must be unique")
     try:
-        return [MODEL_REGISTRY[model_id]() for model_id in model_ids]
+        adapters = [MODEL_REGISTRY[model_id]() for model_id in model_ids]
     except KeyError as error:
         raise ValueError(f"Unknown direct model ID: {error.args[0]}") from error
+    return adapters
 
 
 def collect_requirements(adapters: list[DirectModelAdapter]) -> ModelRequirements:
