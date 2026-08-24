@@ -1,0 +1,19 @@
+search_id: tcn_history_followup_v1
+# History-length checks are held until the predeclared 180-day epoch bracket has
+# completed.  They change only the causal, right-aligned daily-tensor view.
+base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v2.yaml
+target_model: tcn
+stage: screen
+candidates:
+  - id: post_ny_screen_tcn_h90_e2_lr3e4_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 90
+          base: {epochs: 2, learning_rate: 0.0003, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
+  - id: post_ny_screen_tcn_h120_e2_lr3e4_v1
+    overrides:
+      models:
+        tcn:
+          history_days: 120
+          base: {epochs: 2, learning_rate: 0.0003, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
