@@ -1,0 +1,22 @@
+experiment_id: direct_cv_ett_v1
+protocol: FOUR_FOLD_250K_V1
+root_seed: 42
+enabled_models: [ett_direct]
+features:
+  base_sparse_v1: false
+  btyd_v1: false
+models:
+  ett_direct:
+    epochs: 2
+    batch_size: 512
+    gradient_accumulation: 1
+    learning_rate: 0.0003
+    scheduler: cosine
+    warmup_fraction: 0.10
+    weight_decay: 0.0001
+    dropout: 0.10
+    history_days: 180
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+output_root: artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_v1

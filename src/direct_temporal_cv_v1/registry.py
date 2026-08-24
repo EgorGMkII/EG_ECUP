@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .base import DirectModelAdapter, ModelRequirements
 from .adapters.catboost_direct import DirectCatBoostAdapter
+from .adapters.direct_ett import DirectETTAdapter
+from .adapters.direct_tcn import DirectTCNAdapter
 
 
 class _UnimplementedAdapter(DirectModelAdapter):
@@ -25,8 +27,8 @@ MODEL_REGISTRY = {
     # Neural adapters are intentionally still skeletons. Keeping their IDs in
     # the registry gives config validation a stable extension point without
     # accidentally launching an incomplete model.
-    "ett_direct": lambda: _UnimplementedAdapter("ett_direct", ModelRequirements(event_sequences=True)),
-    "tcn_direct": lambda: _UnimplementedAdapter("tcn_direct", ModelRequirements(daily_tensor=True)),
+    "ett_direct": DirectETTAdapter,
+    "tcn_direct": DirectTCNAdapter,
 }
 
 
