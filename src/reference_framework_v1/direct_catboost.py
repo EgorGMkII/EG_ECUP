@@ -18,6 +18,17 @@ SUM_METRICS = ("gmv", "gmv_search", "gmv_cat", "searches", "to_ord", "to_cart")
 TARGET_COLUMNS = frozenset({"target", "z_target", "future_gmv_30d", "will_buy", "will_buy_30d"})
 
 
+def direct_training_anchor(holdout_anchor: str) -> str:
+    """Return the causal snapshot whose labelled 30-day target ends at holdout.
+
+    The direct model is trained as a one-fold temporal learner: a snapshot at
+    ``T - 30d`` is labelled through ``T`` and then predicts from the holdout
+    snapshot at ``T``.  Keeping this explicit prevents a silent gap between
+    the train target and the holdout date in RUN A.
+    """
+    return (date.fromisoformat(holdout_anchor) - timedelta(days=30)).isoformat()
+
+
 def build_direct_snapshot(raw: pl.DataFrame, users: Sequence[int], anchor: str, *, with_target: bool) -> pl.DataFrame:
     """Build one sparse user snapshot using only events at or before ``anchor``."""
     anchor_date = date.fromisoformat(anchor)
@@ -74,15 +85,18 @@ def build_direct_snapshot(raw: pl.DataFrame, users: Sequence[int], anchor: str, 
 
 
 def fit_predict_direct_catboost(context: Any, values: Mapping[str, Any]) -> tuple[np.ndarray, dict[str, Any]]:
-    """Fit the direct branch on the latest causal training snapshot and predict holdout z."""
+    """Fit the direct branch on a causal T-30 snapshot and predict at T."""
     from catboost import CatBoostRegressor, Pool, __version__ as catboost_version
 
     if context.raw_events is None:
         raise RuntimeError("Direct CatBoost requires raw causal events")
-    policy = str(values.get("training_anchors", "latest"))
-    if policy != "latest":
-        raise ValueError("catboost_direct.training_anchors currently supports only 'latest'")
-    train_anchor = context.train_anchors[-1]
+    policy = str(values.get("training_anchors", "holdout_minus_30d"))
+    if policy != "holdout_minus_30d":
+        raise ValueError("catboost_direct.training_anchors currently supports only 'holdout_minus_30d'")
+    train_anchor = direct_training_anchor(context.holdout_anchor)
+    training_target_end = (date.fromisoformat(train_anchor) + timedelta(days=30)).isoformat()
+    if training_target_end != context.holdout_anchor:
+        raise RuntimeError("Direct CatBoost training target must end exactly at holdout anchor")
     started = time.perf_counter()
     progress("DIRECT_CATBOOST_SNAPSHOT_START", run=context.run_name, train_anchor=train_anchor, holdout_anchor=context.holdout_anchor)
     train = build_direct_snapshot(context.raw_events, context.users, train_anchor, with_target=True)
@@ -109,7 +123,9 @@ def fit_predict_direct_catboost(context: Any, values: Mapping[str, Any]) -> tupl
     report = {
         "catboost_version": catboost_version,
         "train_anchor": train_anchor,
+        "training_target_end": training_target_end,
         "holdout_anchor": context.holdout_anchor,
+        "target_to_holdout_gap_days": 0,
         "training_anchor_policy": policy,
         "rows": train.height,
         "feature_count": len(features),

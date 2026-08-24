@@ -141,8 +141,8 @@ class DirectCatBoostAdapter(_Adapter):
         required = {"iterations", "learning_rate", "depth", "l2_leaf_reg", "task_type", "devices", "training_anchors"}
         if set(raw) != required:
             raise ValueError(f"catboost_direct fields must be exactly {sorted(required)}")
-        if raw["task_type"] != "GPU" or raw["training_anchors"] != "latest":
-            raise ValueError("Direct CatBoost requires GPU and latest-anchor training")
+        if raw["task_type"] != "GPU" or raw["training_anchors"] != "holdout_minus_30d":
+            raise ValueError("Direct CatBoost requires GPU and holdout-minus-30d training")
         if int(raw["iterations"]) < 1 or int(raw["depth"]) < 1 or float(raw["learning_rate"]) <= 0:
             raise ValueError("Invalid direct CatBoost parameters")
         return super().validate_config(raw)

@@ -19,11 +19,12 @@ loss_weights: {factorized: 1.0, direct_amount: 0.25, conditional_amount: 0.25, r
 models:
   catboost_direct:
     # The external pure-CatBoost champion recipe: direct log1p(GMV), sparse
-    # causal 7/14/30/60/90/180/365-day features, with latest snapshot only.
+    # causal 7/14/30/60/90/180/365-day features.  For each holdout T, train
+    # snapshot is T-30 and its labelled target ends exactly at T.
     iterations: 300
     learning_rate: 0.05
     depth: 8
     l2_leaf_reg: 5.0
     task_type: GPU
     devices: '0'
-    training_anchors: latest
+    training_anchors: holdout_minus_30d

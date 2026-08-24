@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from src.reference_framework_v1.config import load_experiment_config
+from src.reference_framework_v1.direct_catboost import direct_training_anchor
 from src.reference_framework_v1.registry import build_adapters, collect_required_stores
 
 
@@ -18,6 +19,11 @@ def test_direct_catboost_is_an_independent_final_prediction_channel() -> None:
     assert adapter.prediction_spec.churn_column is None
     assert adapter.prediction_spec.amount_column is None
     assert adapter.prediction_spec.direct_column == "cb_direct_z"
+
+
+def test_direct_catboost_train_target_ends_at_holdout_anchor() -> None:
+    assert direct_training_anchor("2025-12-15") == "2025-11-15"
+    assert direct_training_anchor("2026-01-14") == "2025-12-15"
 
 
 def test_baseline_config_is_strictly_loadable() -> None:
