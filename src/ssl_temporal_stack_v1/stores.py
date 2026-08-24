@@ -310,11 +310,15 @@ class EventMemmapStore:
         offsets = {anchor: index * users for index, anchor in enumerate(anchors)}
         total = len(anchors) * users
         arrays = {
-            "content": np.load(root / "content.npy", mmap_mode="r"),
-            "time_features": np.load(root / "time.npy", mmap_mode="r"),
-            "ranks": np.load(root / "rank.npy", mmap_mode="r"),
-            "padding_mask": np.load(root / "mask.npy", mmap_mode="r"),
-            "empty": np.load(root / "empty.npy", mmap_mode="r"),
+            # PyTorch's default collate warns for every worker when a NumPy
+            # memmap is read-only.  The store is still consumed read-only by
+            # this pipeline; ``r+`` merely provides a writable buffer view so
+            # torch.as_tensor can safely wrap it without materialising copies.
+            "content": np.load(root / "content.npy", mmap_mode="r+"),
+            "time_features": np.load(root / "time.npy", mmap_mode="r+"),
+            "ranks": np.load(root / "rank.npy", mmap_mode="r+"),
+            "padding_mask": np.load(root / "mask.npy", mmap_mode="r+"),
+            "empty": np.load(root / "empty.npy", mmap_mode="r+"),
         }
         expected = {
             "content": ((total, 180, 12), np.dtype(np.float16)),
