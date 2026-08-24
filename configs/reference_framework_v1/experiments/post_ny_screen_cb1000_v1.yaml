@@ -1,0 +1,32 @@
+experiment_id: post_ny_screen_cb1000_v1
+profile: POST_NY_PUBLIC_PROXY
+stage: screen
+root_seed: 42
+enabled_models: [catboost]
+output_root: artifacts/reference_v1/experiments/post_ny_screen_cb1000_v1
+screening: {target_model: catboost}
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+  cohort:
+    screen: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/screen_cohort_25k.parquet
+    full: artifacts/reference_v1/cohorts/POST_NY_PUBLIC_PROXY/full_cohort_100k.parquet
+    universe: sample_submit.csv
+anchor_sampling: {mode: uniform}
+loss_weights: {factorized: 1.0, direct_amount: 0.25, conditional_amount: 0.25, react: 0.10, churn: 0.10}
+models:
+  catboost:
+    iterations: 1000
+    learning_rate: 0.04
+    depth: 6
+    l2_leaf_reg: 6.0
+    task_type: GPU
+    devices: '0'
+    boosting_type: Plain
+    grow_policy: SymmetricTree
+    bootstrap_type: Bayesian
+    bagging_temperature: 1.0
+    random_strength: 1.0
+    border_count: 128
+    nan_mode: Min
+    btyd: {enabled: true, penalizer_coef: 0.001, horizon_days: 30, max_fit_users: 50000}
