@@ -1,0 +1,56 @@
+{
+  "experiment_id": "post_ny_screen_ett_4500_v1",
+  "stage": "screen",
+  "profile": "POST_NY_PUBLIC_PROXY",
+  "job_id": "bt1e4o7c43oh8g1lfe04",
+  "pre_run_commit": "b1ad266",
+  "created_at_utc": "2026-08-23T23:19:21.239000",
+  "finished_at_utc": "2026-08-24T00:50:35.839000",
+  "wall_seconds": 5474.600,
+  "internal_elapsed_seconds": 4572.664374955999,
+  "cohort_rows": 25000,
+  "validation_anchor": "2026-01-14",
+  "enabled_models": ["catboost", "s1", "s2", "ett", "tcn", "residual_mlp"],
+  "hyperparameter_delta_from_baseline": {
+    "ett.base.steps": {"baseline": 3500, "candidate": 4500},
+    "ett.base.learning_rate": {"baseline": 0.0003, "candidate": 0.0003}
+  },
+  "metrics": {
+    "run_a_meta_rmsle": 1.7555512485800853,
+    "validation_rmsle": 1.685991267487465,
+    "baseline_validation_rmsle": 1.686445074489895,
+    "delta_rmsle_candidate_minus_baseline": -0.000453807002430,
+    "transitions": {
+      "00": {"rmsle": 0.6710023289168892, "share_total_squared_error": 0.03339568998544322},
+      "01": {"rmsle": 2.8705624794825817, "share_total_squared_error": 0.11363429796431718},
+      "10": {"rmsle": 2.2496669809605, "share_total_squared_error": 0.4424734039241028},
+      "11": {"rmsle": 1.5254592825344198, "share_total_squared_error": 0.410496608126137}
+    },
+    "react_auc": 0.6751774244131347,
+    "churn_auc": 0.8063244554540159,
+    "mse_logspace": 2.842566554043989
+  },
+  "inputs": {
+    "train_sha256": "5f3aa90992652b8a4f0f398e735a3ba11c2ea6ccf9e8fb1d236436e9a49167c0",
+    "cohort_sha256": "eb9f9fcf949d59120cc8bddc972e8bcb9a77a0bea273ac120fdb3ffbdbe4cf3c",
+    "config_sha256": "01b90c8a6e0e0a482a4ce8da448a1109189b0fd2e86b94bf27282d86535fcef1"
+  },
+  "artifacts": {
+    "frozen_meta_package.json": "e3092acb08eb2ec668de3b6e4c9acc123ff9c1e9908b947e0a13d715622d5faa",
+    "run_a_meta_prediction_bank.parquet": "3acdb4e536aa51a64cb8fdf70b78f16c76f949ccf3424f9333f2e70ddf43e8d1",
+    "run_b_validation_prediction_bank.parquet": "3ed6df00df6df49cffa867365467ea2ed7777943b60a7e8f80fbcbb88714410f",
+    "validation_report.json": "fbc19f9469c903613a210025017a274c6855635980651c4f99d0fb3dd8cdd6d9",
+    "model_training_report.json": "1eda50310b189c7c34486e369545a8dc7cd6f4a3cdb90ca1a5f684b20633f736",
+    "run_manifest.json": "356d7c5f2a033a4ab6554adb327d96137303c1a1df7c54eb29af913a44189679"
+  },
+  "gpu": {
+    "device": "Tesla V100-PCIE-32GB",
+    "cuda": "12.1",
+    "torch": "2.3.1+cu121"
+  },
+  "notes": [
+    "Only ETT base optimizer steps changed; all other models, cohort, seed, losses and meta protocol match baseline.",
+    "ETT base completed exactly 4500 steps in both RUN A and RUN B.",
+    "Public LB was not run; this is a 25k screen validation result."
+  ]
+}
