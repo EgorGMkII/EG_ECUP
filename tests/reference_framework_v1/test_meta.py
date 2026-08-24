@@ -2,6 +2,7 @@ import numpy as np
 
 from src.reference_framework_v1.meta import apply_meta, fit_meta
 from src.reference_framework_v1.predictions import PredictionSchema
+from src.reference_framework_v1.selection import _schema_from_package
 
 
 def test_named_meta_supports_dynamic_columns() -> None:
@@ -33,3 +34,8 @@ def test_direct_prediction_is_late_blended_with_complete_hurdle_branch() -> None
     assert set(package["late_blend_weights"]) == {"hurdle", "direct"}
     assert package["late_blend_weights"]["direct"] > 0.99
     assert np.allclose(apply_meta(package, bank, schema), target, atol=1e-5)
+
+
+def test_selection_recovers_composite_schema_from_frozen_meta_package() -> None:
+    schema = _schema_from_package({"feature_order": {"react": ["r"], "churn": ["c"], "amount": ["a"], "direct": ["d"]}})
+    assert schema == PredictionSchema(("r",), ("c",), ("a",), ("d",))

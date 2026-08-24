@@ -11,8 +11,7 @@ import polars as pl
 
 from .config import ExperimentConfig
 from .meta import apply_meta
-from .predictions import bank_arrays, schema_from_specs
-from .registry import build_adapters
+from .predictions import PredictionSchema, bank_arrays
 
 
 def collect_results(roots: Iterable[Path]) -> list[dict[str, Any]]:
@@ -42,8 +41,28 @@ def collect_results(roots: Iterable[Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def _schema_from_package(package: dict[str, Any]) -> PredictionSchema:
+    """Recover the complete fitted schema, including immutable baseline columns.
+
+    An incremental candidate such as ``catboost_direct`` describes only its
+    new channel in YAML.  The frozen meta package is therefore the source of
+    truth for the complete baseline-plus-candidate prediction schema.
+    """
+    feature_order = package.get("feature_order")
+    if not isinstance(feature_order, dict):
+        raise ValueError("Frozen meta package is missing feature_order")
+    schema = PredictionSchema(
+        react_columns=tuple(feature_order.get("react", ())),
+        churn_columns=tuple(feature_order.get("churn", ())),
+        amount_columns=tuple(feature_order.get("amount", ())),
+        direct_columns=tuple(feature_order.get("direct", ())),
+    )
+    if not schema.react_columns or not schema.churn_columns or not schema.amount_columns:
+        raise ValueError("Frozen meta package is missing hurdle prediction columns")
+    return schema
+
+
 def _scored(root: Path, config: ExperimentConfig) -> tuple[np.ndarray, np.ndarray]:
-    schema = schema_from_specs([adapter.prediction_spec for adapter in build_adapters(config.enabled_models)])
     options = (
         ("run_b_incremental_prediction_bank.parquet", "frozen_incremental_meta_package.json"),
         ("run_b_validation_prediction_bank.parquet", "frozen_meta_package.json"),
@@ -53,6 +72,10 @@ def _scored(root: Path, config: ExperimentConfig) -> tuple[np.ndarray, np.ndarra
         if bank_path.exists() and package_path.exists():
             bank = pl.read_parquet(bank_path)
             package = json.loads(package_path.read_text(encoding="utf-8"))
+            schema = _schema_from_package(package)
+            missing = set(schema.all_columns) - set(bank.columns)
+            if missing:
+                raise ValueError(f"Prediction bank is missing meta package columns: {sorted(missing)}")
             return bank["z_target"].to_numpy().astype(np.float64), apply_meta(package, bank_arrays(bank, schema), schema)
     raise FileNotFoundError(f"No scored prediction bank below {root}")
 
