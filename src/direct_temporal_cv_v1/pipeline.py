@@ -19,6 +19,7 @@ from .artifacts import create_run_root, sha256_file, write_json, write_yaml
 from .config import ExperimentConfig, resolved_config
 from .datasets import build_target_z
 from .features import SparseAggregateFeatureProvider
+from .btyd import DirectBTYDFeatureProvider
 from .metrics import evaluate_z, metrics_dict
 from .registry import build_adapters
 
@@ -60,9 +61,8 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
         adapter.validate_config(config.raw["models"][adapter.model_id])
     if not config.raw.get("features", {}).get("base_sparse_v1", False):
         raise ValueError("direct CV currently requires features.base_sparse_v1=true")
-    if config.raw.get("features", {}).get("btyd_v1", False):
-        raise NotImplementedError("BTYD provider is a later direct-CV phase")
-    provider = SparseAggregateFeatureProvider()
+    use_btyd = bool(config.raw.get("features", {}).get("btyd_v1", False))
+    provider = DirectBTYDFeatureProvider() if use_btyd else SparseAggregateFeatureProvider()
     write_yaml(root / "resolved_config.yaml", resolved_config(config))
     write_json(root / "protocol_manifest.json", {
         "protocol": "FOUR_FOLD_250K_V1",
