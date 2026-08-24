@@ -237,14 +237,14 @@ def main():
         "--async-submit",
         dest="async_submit",
         action="store_true",
-        default=True,
-        help="Submit with DataSphere --async, then monitor by returned job ID (default)",
+        default=False,
+        help="Submit with DataSphere --async, then monitor by returned job ID (opt-in; no live execute stream)",
     )
     parser.add_argument(
         "--sync-submit",
         dest="async_submit",
         action="store_false",
-        help="Use blocking synchronous execute (only for CLI environments where it is verified)",
+        help="Use blocking synchronous execute and preserve the local live stream (default)",
     )
 
     args = parser.parse_args()

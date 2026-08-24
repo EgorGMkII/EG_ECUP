@@ -3,10 +3,18 @@ base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_cand
 target_model: catboost
 stage: screen
 candidates:
-  - id: post_ny_screen_cb800_v1
+  - id: post_ny_screen_cb300_v1
     overrides:
       models:
-        catboost: {iterations: 800}
+        catboost: {iterations: 300}
+  - id: post_ny_screen_cb600_v1
+    overrides:
+      models:
+        catboost: {iterations: 600}
+  - id: post_ny_screen_cb1000_v1
+    overrides:
+      models:
+        catboost: {iterations: 1000}
   - id: post_ny_screen_cb1500_v1
     overrides:
       models:
