@@ -10,6 +10,8 @@ import gc
 import hashlib
 import json
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any
 
 import numpy as np
@@ -91,7 +93,10 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
         fold_dir.mkdir()
         if snapshots is not None:
             write_json(fold_dir / "feature_manifest.json", snapshots.manifest)
-        store_root = fold_dir / "stores"
+        # Heavy daily/event stores are temporary compute state, never output
+        # artifacts. Keeping them outside the run root prevents DataSphere's
+        # output downloader from attempting to fetch >1GB of memmaps.
+        store_root = Path(tempfile.mkdtemp(prefix=f"direct_cv_{fold.fold_id}_"))
         daily_store = build_daily_tensor_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "daily") if needs_daily else None
         event_store = build_event_memmap_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "events") if needs_events else None
         fold_reports: dict[str, Any] = {}
@@ -137,6 +142,7 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
         if event_store is not None:
             event_store.close()
         del snapshots, context, train_z, validation_z, daily_store, event_store
+        shutil.rmtree(store_root, ignore_errors=True)
         gc.collect()
     model_summary: dict[str, Any] = {}
     for model_id in config.enabled_models:
