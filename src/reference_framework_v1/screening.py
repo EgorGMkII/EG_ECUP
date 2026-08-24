@@ -128,12 +128,24 @@ def run_individual_screen(config: ExperimentConfig, *, output_root: Path, pre_ru
 
 
 def _replace(base: pl.DataFrame, candidate: pl.DataFrame, columns: tuple[str, ...], anchor: str) -> pl.DataFrame:
+    """Replace an existing model channel, or append a new independent one.
+
+    The latter is intentionally limited to a complete new channel.  It is how
+    ``catboost_direct`` is evaluated: the immutable hurdle bank remains
+    untouched and the fresh direct column is added only for a newly fit
+    late-blend meta package.
+    """
     required = ["user_id", "anchor", "was_active", "will_buy", "future_gmv_30d", "z_target"]
     if base.height != candidate.height or any(not base[name].equals(candidate[name]) for name in required):
         raise ValueError(f"Baseline and candidate banks are not aligned at {anchor}")
     if set(columns) != (set(candidate.columns) - set(required)):
         raise ValueError("Candidate bank has unexpected prediction columns")
-    return base.drop(list(columns)).with_columns([candidate[name] for name in columns])
+    present = tuple(column for column in columns if column in base.columns)
+    if present and len(present) != len(columns):
+        raise ValueError("Cannot partially replace an existing prediction channel")
+    if present:
+        return base.drop(list(columns)).with_columns([candidate[name] for name in columns])
+    return base.with_columns([candidate[name] for name in columns])
 
 
 def run_incremental_gate(config: ExperimentConfig, *, baseline_root: Path, candidate_root: Path, output_root: Path, pre_run_sha: str, job_id: str | None = None) -> dict[str, Any]:
@@ -160,6 +172,18 @@ def run_incremental_gate(config: ExperimentConfig, *, baseline_root: Path, candi
     except (KeyError, TypeError) as error:
         raise ValueError("Invalid baseline prediction schema") from error
     columns = tuple(column for column in (adapter.prediction_spec.react_column, adapter.prediction_spec.churn_column, adapter.prediction_spec.amount_column, adapter.prediction_spec.direct_column) if column)
+    if not columns:
+        raise ValueError(f"Screening adapter {target_model} declares no prediction columns")
+    missing_from_baseline = tuple(column for column in columns if column not in schema.all_columns)
+    if missing_from_baseline:
+        if target_model != "catboost_direct" or missing_from_baseline != columns:
+            raise ValueError("Only the complete independent direct channel may be appended to an immutable baseline bank")
+        schema = PredictionSchema(
+            react_columns=schema.react_columns,
+            churn_columns=schema.churn_columns,
+            amount_columns=schema.amount_columns,
+            direct_columns=(*schema.direct_columns, *columns),
+        )
     paths = {
         "base_a": baseline_root / "run_a_meta_prediction_bank.parquet", "base_b": baseline_root / "run_b_validation_prediction_bank.parquet",
         "candidate_a": candidate_root / "run_a_target_prediction_bank.parquet", "candidate_b": candidate_root / "run_b_target_prediction_bank.parquet",
