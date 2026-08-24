@@ -1,5 +1,5 @@
 search_id: ett_epochs_lr_v1
-base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v1.yaml
+base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v2.yaml
 target_model: ett
 stage: screen
 candidates:
