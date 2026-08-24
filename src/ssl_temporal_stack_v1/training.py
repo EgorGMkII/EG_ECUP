@@ -34,6 +34,8 @@ BatchFactory = Callable[[int], Iterator[tuple[Batch, int]]]
 def round_robin_batches(
     factories: Mapping[str, BatchFactory[Batch]],
     tickets: Mapping[str, int] | None = None,
+    *,
+    synchronized_epochs: bool = False,
 ) -> Iterator[AnchoredBatch[Batch]]:
     """Yield one batch per anchor in stable order, recreating exhausted iterators.
 
@@ -61,6 +63,32 @@ def round_robin_batches(
             current[selected] -= total
             ordered.append(selected)
         schedule = tuple(ordered)
+    if synchronized_epochs:
+        # An epoch is a complete pass over every anchor loader.  Exhausted
+        # anchors are skipped, never restarted, until every anchor is done.
+        # This is deliberately opt-in so the frozen step-budgeted stack keeps
+        # its historical restart behavior.
+        epoch = 0
+        while True:
+            iterators = {anchor: iter(factories[anchor](epoch)) for anchor in anchors}
+            active = set(anchors)
+            yielded = 0
+            while active:
+                for anchor in schedule:
+                    if anchor not in active:
+                        continue
+                    try:
+                        value, examples = next(iterators[anchor])
+                    except StopIteration:
+                        active.remove(anchor)
+                        continue
+                    if examples <= 0:
+                        raise RuntimeError(f"Anchor {anchor} produced an empty batch")
+                    yielded += 1
+                    yield AnchoredBatch(anchor=anchor, value=value, examples=examples)
+            if yielded == 0:
+                raise RuntimeError("Epoch produced no batches")
+            epoch += 1
     cycles = {anchor: 0 for anchor in anchors}
     iterators = {anchor: iter(factories[anchor](0)) for anchor in anchors}
     while True:

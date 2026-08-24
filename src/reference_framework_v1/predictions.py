@@ -16,10 +16,11 @@ class PredictionSchema:
     react_columns: tuple[str, ...]
     churn_columns: tuple[str, ...]
     amount_columns: tuple[str, ...]
+    direct_columns: tuple[str, ...] = ()
 
     @property
     def all_columns(self) -> tuple[str, ...]:
-        return self.react_columns + self.churn_columns + self.amount_columns
+        return self.react_columns + self.churn_columns + self.amount_columns + self.direct_columns
 
 
 def schema_from_specs(specs: list[PredictionSpec]) -> PredictionSchema:
@@ -27,6 +28,7 @@ def schema_from_specs(specs: list[PredictionSpec]) -> PredictionSchema:
         react_columns=tuple(spec.react_column for spec in specs if spec.react_column),
         churn_columns=tuple(spec.churn_column for spec in specs if spec.churn_column),
         amount_columns=tuple(spec.amount_column for spec in specs if spec.amount_column),
+        direct_columns=tuple(spec.direct_column for spec in specs if spec.direct_column),
     )
     if not schema.react_columns or not schema.churn_columns or not schema.amount_columns:
         raise ValueError("At least one React, Churn, and Amount prediction is required")
@@ -63,6 +65,7 @@ def bank_arrays(bank: pl.DataFrame, schema: PredictionSchema) -> dict[str, np.nd
         "react": bank.select(schema.react_columns).to_numpy().astype(np.float64, copy=False),
         "churn": bank.select(schema.churn_columns).to_numpy().astype(np.float64, copy=False),
         "amount": bank.select(schema.amount_columns).to_numpy().astype(np.float64, copy=False),
+        "direct": bank.select(schema.direct_columns).to_numpy().astype(np.float64, copy=False) if schema.direct_columns else np.empty((bank.height, 0), dtype=np.float64),
         "active": bank["was_active"].to_numpy().astype(np.int8, copy=False),
         "target": bank["z_target"].to_numpy().astype(np.float64, copy=False),
     }

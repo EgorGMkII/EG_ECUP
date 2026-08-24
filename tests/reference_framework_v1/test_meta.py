@@ -13,3 +13,23 @@ def test_named_meta_supports_dynamic_columns() -> None:
     assert result.shape == (32,)
     assert np.isfinite(result).all()
     assert (result >= 0).all()
+
+
+def test_direct_prediction_is_late_blended_with_complete_hurdle_branch() -> None:
+    rng = np.random.default_rng(11)
+    rows = 128
+    target = rng.uniform(0.0, 4.0, rows)
+    schema = PredictionSchema(("react",), ("churn",), ("amount",), ("direct",))
+    bank = {
+        "react": np.zeros((rows, 1)),
+        "churn": np.zeros((rows, 1)),
+        "amount": np.ones((rows, 1)),
+        "direct": target[:, None],
+        "active": rng.integers(0, 2, rows),
+        "target": target,
+    }
+    package = fit_meta(bank, schema, root_seed=42, prediction_bank_sha256="bank", commit_sha="commit", config_sha256="config")
+    assert package["meta_schema_version"] == 3
+    assert set(package["late_blend_weights"]) == {"hurdle", "direct"}
+    assert package["late_blend_weights"]["direct"] > 0.99
+    assert np.allclose(apply_meta(package, bank, schema), target, atol=1e-5)

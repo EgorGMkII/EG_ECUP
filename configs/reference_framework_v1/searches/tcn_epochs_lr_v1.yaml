@@ -1,0 +1,20 @@
+search_id: tcn_epochs_lr_v1
+base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v1.yaml
+target_model: tcn
+stage: screen
+candidates:
+  - id: post_ny_screen_tcn_e2_lr3e4_v1
+    overrides:
+      models:
+        tcn:
+          base: {epochs: 2, learning_rate: 0.0003, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
+  - id: post_ny_screen_tcn_e3_lr3e4_v1
+    overrides:
+      models:
+        tcn:
+          base: {epochs: 3, learning_rate: 0.0003, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}
+  - id: post_ny_screen_tcn_e2_lr2e4_v1
+    overrides:
+      models:
+        tcn:
+          base: {epochs: 2, learning_rate: 0.0002, scheduler: cosine, warmup_fraction: 0.10, weight_decay: 0.0001}

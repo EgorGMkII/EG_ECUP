@@ -33,3 +33,4 @@ class NeuralRecipe:
     head_dropout: float = 0.2
     transformer_dropout: float = 0.1
     loss_weights: LossWeights = LossWeights()
+    synchronized_epochs: bool = False

@@ -1,0 +1,13 @@
+search_id: catboost_specialists_v1
+base_config: configs/reference_framework_v1/experiments/post_ny_epoch_stack_candidate_v1.yaml
+target_model: catboost
+stage: screen
+candidates:
+  - id: post_ny_screen_cb800_v1
+    overrides:
+      models:
+        catboost: {iterations: 800}
+  - id: post_ny_screen_cb1500_v1
+    overrides:
+      models:
+        catboost: {iterations: 1500}

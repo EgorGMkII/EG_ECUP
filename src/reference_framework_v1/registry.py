@@ -18,6 +18,7 @@ from src.ssl_temporal_stack_v1.runtime import derive_seed, progress
 from .base import FirstLevelAdapter, ModelConfig, ModelResult, PredictionSpec, RunContext
 from .candidate_adapters import fit_predict_residual_mlp, fit_predict_tcn
 from .candidates.btyd import AuditedBTYDClassifierProvider, BTYDRecipe
+from .direct_catboost import fit_predict_direct_catboost
 
 
 class _SSLConfigShim:
@@ -33,15 +34,23 @@ class _Adapter(FirstLevelAdapter):
 
 
 def _stage(raw: Mapping[str, Any], location: str, *, allow_zero: bool = False) -> None:
-    allowed = {"steps", "learning_rate", "scheduler", "warmup_steps", "weight_decay", "checkpoint_every"}
+    allowed = {"steps", "epochs", "learning_rate", "scheduler", "warmup_steps", "warmup_fraction", "weight_decay", "checkpoint_every"}
     if set(raw) - allowed or not {"steps", "learning_rate"} <= set(raw):
-        raise ValueError(f"Invalid stage recipe at {location}")
-    if int(raw["steps"]) < (0 if allow_zero else 1) or float(raw["learning_rate"]) < 0:
+        if not ({"epochs", "learning_rate"} <= set(raw) and "steps" not in raw):
+            raise ValueError(f"Invalid stage recipe at {location}")
+    if "steps" in raw and "epochs" in raw:
+        raise ValueError(f"Specify only steps or epochs at {location}")
+    budget = int(raw.get("steps", raw.get("epochs", 0)))
+    if budget < (0 if allow_zero else 1) or float(raw["learning_rate"]) < 0:
         raise ValueError(f"Invalid stage values at {location}")
     if raw.get("scheduler", "cosine") not in {"constant", "linear", "cosine"}:
         raise ValueError(f"Unsupported scheduler at {location}")
-    if not 0 <= int(raw.get("warmup_steps", 0)) < max(1, int(raw["steps"])):
+    if "warmup_steps" in raw and "warmup_fraction" in raw:
+        raise ValueError(f"Specify only warmup_steps or warmup_fraction at {location}")
+    if not 0 <= int(raw.get("warmup_steps", 0)) < max(1, budget):
         raise ValueError(f"Invalid warmup at {location}")
+    if not 0.0 <= float(raw.get("warmup_fraction", 0.0)) < 1.0:
+        raise ValueError(f"Invalid warmup fraction at {location}")
 
 
 class CatBoostAdapter(_Adapter):
@@ -119,6 +128,28 @@ class CatBoostAdapter(_Adapter):
             del subset, target, model
             gc.collect()
         return ModelResult("catboost", predictions, {"catboost_version": catboost_version, "tasks": tasks, "btyd": {"feature_set_id": provider.feature_set_id, "classifier_features": list(provider.feature_names), "amount_features": [], "fit_anchors": list(context.train_anchors), "fit_rows": provider.fit_rows, "history": "full causal history through each anchor"}})
+
+
+class DirectCatBoostAdapter(_Adapter):
+    """Unconditional log-GMV model blended only after the hurdle branch is complete."""
+
+    model_id = "catboost_direct"
+    required_stores = frozenset({"frames"})
+    prediction_spec = PredictionSpec("catboost_direct", None, None, None, "cb_direct_z")
+
+    def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
+        required = {"iterations", "learning_rate", "depth", "l2_leaf_reg", "task_type", "devices", "training_anchors"}
+        if set(raw) != required:
+            raise ValueError(f"catboost_direct fields must be exactly {sorted(required)}")
+        if raw["task_type"] != "GPU" or raw["training_anchors"] != "latest":
+            raise ValueError("Direct CatBoost requires GPU and latest-anchor training")
+        if int(raw["iterations"]) < 1 or int(raw["depth"]) < 1 or float(raw["learning_rate"]) <= 0:
+            raise ValueError("Invalid direct CatBoost parameters")
+        return super().validate_config(raw)
+
+    def fit_predict(self, context: RunContext, config: ModelConfig) -> ModelResult:
+        prediction, report = fit_predict_direct_catboost(context, config.values)
+        return ModelResult(self.model_id, {"cb_direct_z": prediction}, report)
 
 
 class GRUAdapter(_Adapter):
@@ -230,7 +261,7 @@ class ResidualMLPAdapter(_Adapter):
         return fit_predict_residual_mlp(context, dict(config.values))
 
 
-MODEL_REGISTRY = {"catboost": CatBoostAdapter, "s1": lambda: GRUAdapter("s1"), "s2": lambda: GRUAdapter("s2"), "ett": ETTAdapter, "tcn": TCNAdapter, "residual_mlp": ResidualMLPAdapter}
+MODEL_REGISTRY = {"catboost": CatBoostAdapter, "catboost_direct": DirectCatBoostAdapter, "s1": lambda: GRUAdapter("s1"), "s2": lambda: GRUAdapter("s2"), "ett": ETTAdapter, "tcn": TCNAdapter, "residual_mlp": ResidualMLPAdapter}
 
 
 def _optimizer(raw: Mapping[str, Any]) -> OptimizerRecipe:
@@ -245,6 +276,10 @@ def _neural_recipes(values: Mapping[str, Any]) -> tuple[NeuralRecipe, dict[str, 
         base=_optimizer(values["base"]), specialist_head=specialists["react"][0], specialist_finetune=specialists["react"][1],
         encoder_dropout=float(values.get("encoder_dropout", 0.2)), head_dropout=float(values.get("head_dropout", 0.2)), transformer_dropout=float(values.get("transformer_dropout", 0.1)),
         loss_weights=LossWeights(**loss),
+        synchronized_epochs=any(
+            isinstance(stage, Mapping) and "epoch_resolution" in stage
+            for stage in [values.get("ssl"), values.get("base"), *(phase for task in values["specialists"].values() for phase in task.values())]
+        ),
     )
     return recipe, specialists
 

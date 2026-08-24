@@ -33,7 +33,7 @@ def _progress(run: str, model: str, stage: str, task: str | None = None):
 
 
 def _fit_steps(*, model: torch.nn.Module, factories, steps: int, recipe: dict[str, Any], device: torch.device, run: str, model_id: str, stage: str, task: str | None, loss: Callable[[tuple[torch.Tensor, ...]], torch.Tensor], tickets: dict[str, int] | None) -> TrainingStats:
-    stream = round_robin_batches(factories, tickets)
+    stream = round_robin_batches(factories, tickets, synchronized_epochs="epoch_resolution" in recipe)
     control = StepOptimizer(model.parameters(), total_steps=steps, learning_rate=float(recipe["learning_rate"]), weight_decay=float(recipe.get("weight_decay", 1e-4)), warmup_steps=int(recipe.get("warmup_steps", 0)), scheduler=str(recipe.get("scheduler", "cosine")), device=device)
     model.train()
     progress("TRAIN_START", run=run, model=model_id, stage=stage, task=task, steps=steps)

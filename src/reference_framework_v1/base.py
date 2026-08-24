@@ -20,6 +20,7 @@ class PredictionSpec:
     react_column: str | None
     churn_column: str | None
     amount_column: str | None
+    direct_column: str | None = None
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,7 @@ from src.ssl_temporal_stack_v1.stores import build_store_registry_for_anchors
 
 from .base import ModelResult, RunContext
 from .config import ExperimentConfig, resolved_config
+from .epochs import resolve_epoch_recipe
 from .meta import apply_meta, apply_meta_components, fit_meta
 from .predictions import PredictionSchema, bank_arrays, make_prediction_bank, schema_from_specs, validate_prediction_mapping
 from .registry import build_adapters, collect_required_stores
@@ -52,7 +53,14 @@ def _merge(results: list[ModelResult], schema: PredictionSchema, rows: int) -> t
 
 def _fit(context: RunContext, adapters, model_configs, schema: PredictionSchema) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
     context.stores.anchor_tickets = context.anchor_tickets
-    results = [adapter.fit_predict(context, model_configs[adapter.model_id]) for adapter in adapters]
+    resolved = {
+        adapter.model_id: type(model_configs[adapter.model_id])(
+            adapter.model_id,
+            resolve_epoch_recipe(context, adapter.model_id, model_configs[adapter.model_id].values),
+        )
+        for adapter in adapters
+    }
+    results = [adapter.fit_predict(context, resolved[adapter.model_id]) for adapter in adapters]
     values, report = _merge(results, schema, len(context.users))
     gc.collect()
     if context.device.type == "cuda":
@@ -80,14 +88,14 @@ def run_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | 
     model_configs = {}
     for adapter in adapters:
         values = dict(config.raw["models"][adapter.model_id])
-        if adapter.model_id != "catboost":
+        if adapter.model_id not in {"catboost", "catboost_direct"}:
             values["loss_weights"] = config.raw.get("loss_weights", {})
         model_configs[adapter.model_id] = adapter.validate_config(values)
     schema = schema_from_specs([adapter.prediction_spec for adapter in adapters])
     anchors = tuple(sorted(set((*config.profile.run_a_anchors, config.profile.meta_anchor, *config.profile.run_b_anchors, config.profile.validation_anchor))))
     stores = build_store_registry_for_anchors(raw, list(users), store_anchors=anchors, training_anchors=config.profile.run_b_anchors, root=config.output_root / "_work" / "stores", cohort_sha256=inputs["cohort_sha256"], required_stores=collect_required_stores(adapters))
     started = time.perf_counter()
-    manifest: dict[str, Any] = {"experiment_id": config.experiment_id, "profile": config.profile.name, "stage": config.stage, "config_sha256": config.sha256, "pre_run_commit_sha": pre_run_sha, "job_id": job_id, "inputs": inputs, "gpu": gpu_info(), "enabled_models": list(config.enabled_models), "prediction_schema": {"react": list(schema.react_columns), "churn": list(schema.churn_columns), "amount": list(schema.amount_columns)}, "required_stores": sorted(collect_required_stores(adapters))}
+    manifest: dict[str, Any] = {"experiment_id": config.experiment_id, "profile": config.profile.name, "stage": config.stage, "config_sha256": config.sha256, "pre_run_commit_sha": pre_run_sha, "job_id": job_id, "inputs": inputs, "gpu": gpu_info(), "enabled_models": list(config.enabled_models), "prediction_schema": {"react": list(schema.react_columns), "churn": list(schema.churn_columns), "amount": list(schema.amount_columns), "direct": list(schema.direct_columns)}, "required_stores": sorted(collect_required_stores(adapters))}
     write_json(config.output_root / "run_manifest.json", manifest)
     try:
         sampling = config.raw.get("anchor_sampling", {"mode": "uniform"})
@@ -142,7 +150,7 @@ def run_final(config: ExperimentConfig, *, pre_run_sha: str, job_id: str | None 
     model_configs = {}
     for adapter in adapters:
         values = dict(config.raw["models"][adapter.model_id])
-        if adapter.model_id != "catboost":
+        if adapter.model_id not in {"catboost", "catboost_direct"}:
             values["loss_weights"] = config.raw.get("loss_weights", {})
         model_configs[adapter.model_id] = adapter.validate_config(values)
     schema = schema_from_specs([adapter.prediction_spec for adapter in adapters])

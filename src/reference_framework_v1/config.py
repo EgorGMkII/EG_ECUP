@@ -14,7 +14,7 @@ from .profiles import TemporalProfile, get_profile
 
 
 STAGES = frozenset({"screen", "full", "final"})
-MODEL_IDS = frozenset({"catboost", "s1", "s2", "ett", "tcn", "residual_mlp"})
+MODEL_IDS = frozenset({"catboost", "catboost_direct", "s1", "s2", "ett", "tcn", "residual_mlp"})
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ def load_experiment_config(path: Path) -> ExperimentConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("Experiment config must be a mapping")
-    _require_keys(raw, {"experiment_id", "profile", "stage", "root_seed", "enabled_models", "output_root", "inputs", "models", "anchor_sampling", "loss_weights", "final"}, "root")
+    _require_keys(raw, {"experiment_id", "profile", "stage", "root_seed", "enabled_models", "output_root", "inputs", "models", "anchor_sampling", "loss_weights", "final", "screening"}, "root")
     stage = str(raw["stage"])
     if stage not in STAGES:
         raise ValueError(f"Unknown stage: {stage}")
@@ -92,6 +92,12 @@ def validate_experiment_config(config: ExperimentConfig) -> None:
         final = config.raw.get("final")
         if not isinstance(final, dict) or not {"frozen_meta_path", "frozen_meta_sha256", "source_full_config_sha256"} <= set(final):
             raise ValueError("final config must pin a full meta package and source config hash")
+    screening = config.raw.get("screening")
+    if screening is not None:
+        if not isinstance(screening, dict) or set(screening) != {"target_model"}:
+            raise ValueError("screening must contain only target_model")
+        if screening["target_model"] not in config.enabled_models:
+            raise ValueError("screening.target_model must be enabled")
 
 
 def resolved_config(config: ExperimentConfig) -> dict[str, Any]:

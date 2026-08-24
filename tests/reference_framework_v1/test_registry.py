@@ -12,6 +12,14 @@ def test_registry_preserves_config_order_and_store_union() -> None:
     assert collect_required_stores(adapters) == frozenset({"frames", "daily", "events"})
 
 
+def test_direct_catboost_is_an_independent_final_prediction_channel() -> None:
+    adapter = build_adapters(("catboost_direct",))[0]
+    assert adapter.prediction_spec.react_column is None
+    assert adapter.prediction_spec.churn_column is None
+    assert adapter.prediction_spec.amount_column is None
+    assert adapter.prediction_spec.direct_column == "cb_direct_z"
+
+
 def test_baseline_config_is_strictly_loadable() -> None:
     config = load_experiment_config(Path("configs/reference_framework_v1/baselines/post_ny_full.yaml"))
     assert config.stage == "full"

@@ -105,7 +105,7 @@ def fit_gru_pretrainer(
     factories = dense_ssl_factories(
         stores, anchors, run=run, model_id=model_id, batch_size=budget.batch_size
     )
-    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None), synchronized_epochs=recipe.synchronized_epochs if recipe else False)
     opt = recipe.ssl if recipe else OptimizerRecipe(1e-3, 1e-4, _warmup_steps(budget.ssl_steps))
     control = StepOptimizer(model.parameters(), total_steps=budget.ssl_steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     progress("TRAIN_START", run=run, model=model_id, stage="ssl", steps=budget.ssl_steps)
@@ -158,7 +158,7 @@ def fit_gru_base(
     factories = dense_base_factories(
         stores, anchors, run=run, model_id=model_id, batch_size=budget.batch_size
     )
-    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None), synchronized_epochs=recipe.synchronized_epochs if recipe else False)
     opt = recipe.base if recipe else OptimizerRecipe(5e-4, 1e-4, _warmup_steps(budget.base_steps))
     control = StepOptimizer(base.parameters(), total_steps=budget.base_steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     progress("TRAIN_START", run=run, model=model_id, stage="base", steps=budget.base_steps)
@@ -205,7 +205,7 @@ def _fit_dense_specialist_phase(
         stores, anchors, run=run, model_id=model_id, task=task, phase=phase,
         batch_size=batch_size,
     )
-    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None), synchronized_epochs=recipe.synchronized_epochs if recipe else False)
     opt = optimizer_recipe or OptimizerRecipe(learning_rate, 1e-4, 0)
     control = StepOptimizer(model.parameters(), total_steps=steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     model.train()
@@ -297,7 +297,7 @@ def fit_ett_base(
     factories = event_base_factories(
         stores, anchors, run=run, batch_size=micro_batch_size
     )
-    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None), synchronized_epochs=recipe.synchronized_epochs if recipe else False)
     opt = recipe.base if recipe else OptimizerRecipe(3e-4, 1e-4, _warmup_steps(budget.base_steps))
     control = StepOptimizer(model.parameters(), total_steps=budget.base_steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     pending = 0
@@ -354,7 +354,7 @@ def _fit_ett_specialist_phase(
     factories = event_specialist_factories(
         stores, anchors, run=run, task=task, phase=phase, batch_size=micro_batch_size
     )
-    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None))
+    stream = round_robin_batches(factories, getattr(stores, "anchor_tickets", None), synchronized_epochs=recipe.synchronized_epochs if recipe else False)
     opt = optimizer_recipe or OptimizerRecipe(learning_rate, 1e-4, 0)
     control = StepOptimizer(model.parameters(), total_steps=steps, learning_rate=opt.learning_rate, weight_decay=opt.weight_decay, warmup_steps=opt.warmup_steps, scheduler=opt.scheduler, device=device)
     pending = 0
