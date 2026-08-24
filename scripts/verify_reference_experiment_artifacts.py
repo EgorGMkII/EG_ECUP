@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import polars as pl
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,13 @@ SCREEN_REQUIRED = (
     "run_a_target_prediction_bank.parquet",
     "run_b_target_prediction_bank.parquet",
     "individual_report.json",
+    "artifact_sha256.json",
+)
+FINAL_REQUIRED = (
+    "final_manifest.json",
+    "resolved_config.yaml",
+    "model_training_report.json",
+    "submission.csv",
     "artifact_sha256.json",
 )
 BASE_COLUMNS = ("user_id", "anchor", "was_active", "will_buy", "future_gmv_30d", "z_target")
@@ -154,6 +162,44 @@ def verify_screen(root: Path, *, expected_rows: int | None = None) -> dict[str, 
         "amount": [spec.amount_column] if spec.amount_column else [],
         "direct": [spec.direct_column] if spec.direct_column else [],
     }
+
+
+def verify_final(root: Path, *, expected_rows: int | None = None) -> dict[str, Any]:
+    """Verify one template-aligned, pinned 250k final submission."""
+    missing = [name for name in FINAL_REQUIRED if not (root / name).is_file()]
+    if missing:
+        raise FileNotFoundError(f"Missing final artifacts: {missing}")
+    manifest = _read_json(root / "final_manifest.json")
+    if manifest.get("status") != "COMPLETED" or manifest.get("stage") != "final":
+        raise ValueError("Final manifest is not completed")
+    rows = expected_rows or 250_000
+    if rows != 250_000 or int(manifest.get("submission_rows", -1)) != rows:
+        raise ValueError("Invalid final submission row count")
+    hashes = _read_json(root / "artifact_sha256.json")
+    expected_hash_names = set(FINAL_REQUIRED) - {"artifact_sha256.json"}
+    if set(hashes) != expected_hash_names:
+        raise ValueError("Final artifact hash set is incomplete")
+    for name, expected_hash in hashes.items():
+        if sha256(root / name) != expected_hash:
+            raise ValueError(f"Final artifact hash mismatch: {name}")
+    submission = pl.read_csv(root / "submission.csv")
+    if submission.columns != ["user_id", "predict"] or submission.height != rows or submission["user_id"].n_unique() != rows:
+        raise ValueError("Invalid final submission schema")
+    prediction = submission["predict"].to_numpy()
+    if not np.isfinite(prediction).all() or (prediction < 0).any():
+        raise ValueError("Invalid final predictions")
+    resolved = yaml.safe_load((root / "resolved_config.yaml").read_text(encoding="utf-8"))
+    template_path = Path(resolved["inputs"]["sample_submit"])
+    if not template_path.is_file() or sha256(template_path) != manifest["inputs"]["cohort_sha256"]:
+        raise ValueError("Final template provenance mismatch")
+    template = pl.read_csv(template_path).select("user_id")
+    if not submission["user_id"].equals(template["user_id"]):
+        raise ValueError("Final user_id order differs from sample template")
+    if manifest.get("submission_sha256") != sha256(root / "submission.csv"):
+        raise ValueError("Final manifest submission hash mismatch")
+    if manifest.get("submission_schema") != ["user_id", "predict"]:
+        raise ValueError("Final manifest submission schema mismatch")
+    return {"status": "OK", "mode": "final", "experiment_id": manifest["experiment_id"], "rows": rows, "submission_sha256": manifest["submission_sha256"], "artifact_sha256": sha256(root / "artifact_sha256.json")}
     a_path, b_path = root / "run_a_target_prediction_bank.parquet", root / "run_b_target_prediction_bank.parquet"
     a_bank = _validate_bank(a_path, rows=rows, schema=schema, strict_column_order=False)
     b_bank = _validate_bank(b_path, rows=rows, schema=schema, strict_column_order=False)
@@ -176,6 +222,8 @@ def verify_screen(root: Path, *, expected_rows: int | None = None) -> dict[str, 
 
 
 def verify(root: Path, *, expected_rows: int | None = None) -> dict[str, Any]:
+    if (root / "final_manifest.json").is_file():
+        return verify_final(root, expected_rows=expected_rows)
     if (root / "run_manifest.json").is_file():
         return verify_experiment(root, expected_rows=expected_rows)
     if (root / "screen_manifest.json").is_file():
