@@ -24,3 +24,11 @@ def test_btyd_config_is_separate_from_baseline() -> None:
     config = load_experiment_config(Path("configs/direct_temporal_cv_v1/catboost_btyd_pending.yaml"))
     assert config.raw["features"]["btyd_v1"] is True
     assert config.output_root.name == "direct_cv_catboost_btyd_pending_v1"
+
+
+def test_btyd_contract_uses_classifier_only_columns() -> None:
+    from src.direct_temporal_cv_v1.btyd import DirectBTYDFeatureProvider
+
+    assert DirectBTYDFeatureProvider.allowed_columns == (
+        "btyd_p_buy_30d", "btyd_expected_purchases_30d", "btyd_p_alive"
+    )

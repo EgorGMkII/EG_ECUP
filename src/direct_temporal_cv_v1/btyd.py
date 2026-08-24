@@ -32,6 +32,10 @@ class DirectBTYDFeatureProvider(FeatureProvider):
         valid_btyd, _, _ = generate_btyd_dataset_for_anchor(
             raw, list(users), validation_anchor, bgnbd_model=bg_model, gamma_model=gamma_model, fit_models=False
         )
+        # The legacy provider uses the auditable long name; the direct-CV
+        # contract keeps the compact name used by the experiment specification.
+        train_btyd = train_btyd.rename({"btyd_p_at_least_one_purchase_30d": "btyd_p_buy_30d"})
+        valid_btyd = valid_btyd.rename({"btyd_p_at_least_one_purchase_30d": "btyd_p_buy_30d"})
         columns = list(self.allowed_columns)
         train_extra = train_btyd.select(["user_id", *columns])
         valid_extra = valid_btyd.select(["user_id", *columns])
