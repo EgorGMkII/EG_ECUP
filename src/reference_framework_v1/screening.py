@@ -23,7 +23,7 @@ from .config import ExperimentConfig, resolved_config
 from .epochs import resolve_epoch_recipe
 from .meta import apply_meta_components, fit_meta
 from .pipeline import _load_inputs
-from .predictions import bank_arrays, make_prediction_bank, schema_from_specs
+from .predictions import PredictionSchema, bank_arrays, make_prediction_bank, schema_from_specs
 from .registry import build_adapters, collect_required_stores
 
 
@@ -143,7 +143,22 @@ def run_incremental_gate(config: ExperimentConfig, *, baseline_root: Path, candi
     if not target_model:
         raise ValueError("Incremental gate requires screening.target_model")
     adapter = build_adapters((target_model,))[0]
-    schema = schema_from_specs([item.prediction_spec for item in build_adapters(config.enabled_models)])
+    baseline_manifest_path = baseline_root / "run_manifest.json"
+    if not baseline_manifest_path.is_file():
+        raise FileNotFoundError(f"Missing immutable baseline manifest: {baseline_manifest_path}")
+    baseline_manifest = json.loads(baseline_manifest_path.read_text(encoding="utf-8"))
+    raw_schema = baseline_manifest.get("prediction_schema")
+    if not isinstance(raw_schema, dict):
+        raise ValueError("Baseline manifest has no prediction schema")
+    try:
+        schema = PredictionSchema(
+            react_columns=tuple(raw_schema["react"]),
+            churn_columns=tuple(raw_schema["churn"]),
+            amount_columns=tuple(raw_schema["amount"]),
+            direct_columns=tuple(raw_schema.get("direct", ())),
+        )
+    except (KeyError, TypeError) as error:
+        raise ValueError("Invalid baseline prediction schema") from error
     columns = tuple(column for column in (adapter.prediction_spec.react_column, adapter.prediction_spec.churn_column, adapter.prediction_spec.amount_column, adapter.prediction_spec.direct_column) if column)
     paths = {
         "base_a": baseline_root / "run_a_meta_prediction_bank.parquet", "base_b": baseline_root / "run_b_validation_prediction_bank.parquet",
