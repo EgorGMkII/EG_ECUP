@@ -34,4 +34,4 @@ cloud-instance-types:
   - c1.4
 working-storage:
   type: SSD
-  size: 50Gb
+  size: 100Gb
