@@ -6,6 +6,7 @@ from .base import DirectModelAdapter, ModelRequirements
 from .adapters.catboost_direct import DirectCatBoostAdapter
 from .adapters.direct_ett import DirectETTAdapter
 from .adapters.direct_tcn import DirectTCNAdapter
+from .adapters.catboost_cohort_specialist import CatBoostCohortSpecialistAdapter
 
 
 class _UnimplementedAdapter(DirectModelAdapter):
@@ -24,6 +25,7 @@ class _UnimplementedAdapter(DirectModelAdapter):
 
 MODEL_REGISTRY = {
     "catboost_direct": DirectCatBoostAdapter,
+    "catboost_cohort_specialist": CatBoostCohortSpecialistAdapter,
     # Neural adapters are intentionally still skeletons. Keeping their IDs in
     # the registry gives config validation a stable extension point without
     # accidentally launching an incomplete model.
