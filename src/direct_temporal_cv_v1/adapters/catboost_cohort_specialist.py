@@ -1,6 +1,6 @@
 """Cohort-specialist CatBoost: active-user hurdle in z-space.
 
-For was_active=1 (gmv_sum_90d > 0):
+For was_active=1 (gmv_sum_{W}d > 0, W = activity_window_days):
     pred_z = P(will_buy | active) * E[z | active, will_buy=1]
 
 For was_active=0:
@@ -8,6 +8,12 @@ For was_active=0:
 
 Both components stay in z = log1p(GMV) space.  The decomposition
 E[z] = P(buy) * E[z|buy] is MSE-optimal for RMSLE.
+
+activity_window_days controls what counts as "was_active":
+  90 (default) — purchased in 90-day window before anchor
+  60 — purchased in 60-day window
+  30 — purchased in 30-day window (stricter: recent buyers only)
+All three windows are already computed by SparseAggregateFeatureProvider.
 """
 
 from __future__ import annotations
@@ -24,19 +30,25 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
     model_id = "catboost_cohort_specialist"
     requirements = ModelRequirements(tabular_features=True)
 
-    _ACTIVITY_FEATURE = "gmv_sum_90d"
+    _VALID_WINDOWS = (30, 60, 90)
 
     def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
         allowed = {
             "churn_iterations", "churn_depth", "churn_learning_rate", "churn_l2_leaf_reg",
             "amount_iterations", "amount_depth", "amount_learning_rate", "amount_l2_leaf_reg",
             "inactive_iterations", "inactive_depth", "inactive_learning_rate", "inactive_l2_leaf_reg",
-            "thread_count", "random_seed",
+            "thread_count", "random_seed", "activity_window_days",
         }
         unknown = set(raw) - allowed
         if unknown:
             raise ValueError(f"Unknown {self.model_id} fields: {sorted(unknown)}")
+        activity_window = int(raw.get("activity_window_days", 90))
+        if activity_window not in self._VALID_WINDOWS:
+            raise ValueError(
+                f"activity_window_days must be one of {self._VALID_WINDOWS}, got {activity_window}"
+            )
         values = {
+            "activity_window_days": activity_window,
             "churn_iterations": int(raw.get("churn_iterations", 500)),
             "churn_depth": int(raw.get("churn_depth", 6)),
             "churn_learning_rate": float(raw.get("churn_learning_rate", 0.04)),
@@ -66,8 +78,13 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
         val_tab = context.validation_tabular
         feature_order = tuple(c for c in train_tab.columns if c != "user_id")
 
-        if self._ACTIVITY_FEATURE not in feature_order:
-            raise ValueError(f"Feature '{self._ACTIVITY_FEATURE}' not in tabular columns")
+        activity_window = config.values["activity_window_days"]
+        activity_feature = f"gmv_sum_{activity_window}d"
+        if activity_feature not in feature_order:
+            raise ValueError(
+                f"Feature '{activity_feature}' not in tabular columns. "
+                f"Available gmv_sum columns: {[c for c in feature_order if 'gmv_sum' in c]}"
+            )
 
         x_train = train_tab.select(feature_order).to_numpy().astype(np.float32, copy=False)
         x_val = val_tab.select(feature_order).to_numpy().astype(np.float32, copy=False)
@@ -75,9 +92,10 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
         if not np.isfinite(x_train).all() or not np.isfinite(x_val).all():
             raise ValueError("Feature matrix contains non-finite values")
 
-        activity_idx = feature_order.index(self._ACTIVITY_FEATURE)
+        activity_idx = feature_order.index(activity_feature)
         train_active = x_train[:, activity_idx] > 0
         val_active = x_val[:, activity_idx] > 0
+        print(f"  [COHORT] activity_feature={activity_feature} activity_window={activity_window}d", flush=True)
 
         train_z = context.train_target_z
         train_will_buy = (train_z > 0).astype(np.int32)
@@ -93,9 +111,14 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
         x_train_active = x_train[train_active]
         y_cls_target = train_will_buy[train_active]
         n_active_train = int(train_active.sum())
+        n_inactive_train_prelim = int((~train_active).sum())
         buy_rate = float(y_cls_target.mean())
 
-        print(f"  [COHORT] Active train N={n_active_train}, buy_rate={buy_rate:.4f}", flush=True)
+        print(
+            f"  [COHORT] Active train N={n_active_train} ({n_active_train/(n_active_train+n_inactive_train_prelim):.1%}), "
+            f"Inactive train N={n_inactive_train_prelim}, buy_rate(active)={buy_rate:.4f}",
+            flush=True,
+        )
 
         cb_churn = CatBoostClassifier(
             iterations=v["churn_iterations"],
