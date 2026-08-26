@@ -1,5 +1,5 @@
 name: ozon-direct-cb-price-ett-sub
-desc: Full-history 250k submission: CatBoost Price+Power Specialist (0.85) + ETT Direct Regressor (0.15).
+desc: "Full-history 250k submission: CatBoost Price+Power Specialist (0.85) + ETT Direct Regressor (0.15)."
 cmd: >
   export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ;
   python3 -u scripts/build_direct_cb_price_power_ett_submission.py
