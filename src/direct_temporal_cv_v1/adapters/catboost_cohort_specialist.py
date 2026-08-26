@@ -48,6 +48,7 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
             "inactive_learning_rate",
             "inactive_l2_leaf_reg",
             "borderline_weight",
+            "p_power",
             "thread_count",
             "random_seed",
         }
@@ -74,6 +75,7 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
             "inactive_learning_rate": float(raw.get("inactive_learning_rate", 0.05)),
             "inactive_l2_leaf_reg": float(raw.get("inactive_l2_leaf_reg", 5.0)),
             "borderline_weight": float(raw.get("borderline_weight", 1.0)),
+            "p_power": float(raw.get("p_power", 1.0)),
             "thread_count": int(raw.get("thread_count", 8)),
             "random_seed": int(raw.get("random_seed", 42)),
         }
@@ -197,7 +199,8 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
             )
             cb_amount.fit(x_train_buyers, z_train_buyers, verbose=False)
             cond_z_active = np.maximum(cb_amount.predict(x_val[val_active]), 0.0)
-            prediction_z[val_active_idx] = p_buy_active * cond_z_active
+            p_factor = (p_buy_active ** v["p_power"]) if v["p_power"] != 1.0 else p_buy_active
+            prediction_z[val_active_idx] = p_factor * cond_z_active
             reports["amount_regressor"] = {
                 "iterations": v["amount_iterations"],
                 "depth": v["amount_depth"],
