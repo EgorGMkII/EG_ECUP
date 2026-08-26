@@ -1,0 +1,31 @@
+name: ozon-sub-unified-hurdle-ett
+desc: "Full 250k training and submission build for Unified Hurdle (0.70 CB + 0.30 Causal GRU) + 0.30 ETT Direct."
+cmd: >
+  export PYTHONPATH=. ;
+  python3 -u scripts/build_direct_unified_hurdle_ett_submission.py
+  --train data/train.parquet
+  --sample-submit sample_submit.csv
+  --output-root artifacts/direct_unified_hurdle_ett_submission_v1
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_unified_hurdle_ett_submission_v1/submission.csv
+  - artifacts/direct_unified_hurdle_ett_submission_v1/manifest.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
