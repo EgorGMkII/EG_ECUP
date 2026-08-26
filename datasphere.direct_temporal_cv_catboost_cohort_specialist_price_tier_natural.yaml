@@ -1,0 +1,35 @@
+name: ozon-direct-cv-cb-price-natural
+desc: Four-fold 250k CV for CatBoost Specialist with Price Tier, Ticket Size, and natural calibration (p_power=1.0).
+cmd: >
+  export PYTHONPATH=. ;
+  python3 -u scripts/run_direct_temporal_cv.py
+  --experiment-config configs/direct_temporal_cv_v1/catboost_cohort_specialist_price_tier_natural.yaml
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/cv_summary.json
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/protocol_manifest.json
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/resolved_config.yaml
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/sha256sums.json
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/fold_F1_predictions.parquet
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/fold_F2_predictions.parquet
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/fold_F3_predictions.parquet
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_catboost_cohort_specialist_price_tier_natural_v1/fold_F4_predictions.parquet
+cloud-instance-types:
+  - c1.4
+working-storage:
+  type: SSD
+  size: 100Gb
