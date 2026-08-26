@@ -24,13 +24,25 @@ class DirectETTAdapter(DirectModelAdapter):
     requirements = ModelRequirements(event_sequences=True)
 
     def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
-        allowed = {"epochs", "batch_size", "gradient_accumulation", "learning_rate", "scheduler", "warmup_fraction", "weight_decay", "dropout", "history_days"}
+        allowed = {"epochs", "batch_size", "gradient_accumulation", "learning_rate", "scheduler", "warmup_fraction", "weight_decay", "dropout", "history_days", "multitask", "aux_weight"}
         unknown = set(raw) - allowed
         if unknown:
             raise ValueError(f"Unknown ett_direct fields: {sorted(unknown)}")
-        values = {"epochs": int(raw.get("epochs", 2)), "batch_size": int(raw.get("batch_size", 512)), "gradient_accumulation": int(raw.get("gradient_accumulation", 1)), "learning_rate": float(raw.get("learning_rate", 3e-4)), "scheduler": str(raw.get("scheduler", "cosine")), "warmup_fraction": float(raw.get("warmup_fraction", 0.1)), "weight_decay": float(raw.get("weight_decay", 1e-4)), "dropout": float(raw.get("dropout", 0.1)), "history_days": int(raw.get("history_days", 180))}
-        if values["epochs"] not in {1, 2, 3}:
-            raise ValueError("ett_direct epochs must be 1, 2, or 3")
+        values = {
+            "epochs": int(raw.get("epochs", 2)),
+            "batch_size": int(raw.get("batch_size", 512)),
+            "gradient_accumulation": int(raw.get("gradient_accumulation", 1)),
+            "learning_rate": float(raw.get("learning_rate", 3e-4)),
+            "scheduler": str(raw.get("scheduler", "cosine")),
+            "warmup_fraction": float(raw.get("warmup_fraction", 0.1)),
+            "weight_decay": float(raw.get("weight_decay", 1e-4)),
+            "dropout": float(raw.get("dropout", 0.1)),
+            "history_days": int(raw.get("history_days", 180)),
+            "multitask": bool(raw.get("multitask", False)),
+            "aux_weight": float(raw.get("aux_weight", 0.2)),
+        }
+        if values["epochs"] not in {1, 2, 3, 4}:
+            raise ValueError("ett_direct epochs must be 1, 2, 3, or 4")
         if values["history_days"] != 180:
             raise ValueError("ett_direct history_days is pinned to 180 in v1")
         if values["scheduler"] not in {"constant", "linear", "cosine"}:
@@ -47,6 +59,8 @@ class DirectETTAdapter(DirectModelAdapter):
         valid_arrays = context.validation_events
         model.train()
         batch_size = config.values["batch_size"]
+        multitask = config.values["multitask"]
+        aux_weight = config.values["aux_weight"]
         for epoch in range(config.values["epochs"]):
             order = np.arange(len(context.users))
             rng = np.random.default_rng(context.root_seed + epoch)
@@ -56,8 +70,18 @@ class DirectETTAdapter(DirectModelAdapter):
                 inputs = tuple(torch.as_tensor(array[idx], device=device) for array in train_arrays)
                 inputs = (inputs[0].float(), inputs[1].float(), inputs[2].long(), inputs[3].bool(), inputs[4].bool())
                 target = torch.as_tensor(context.train_target_z[idx], device=device).float()
-                prediction = model(*inputs)["direct_z"]
+                out = model(*inputs)
+                prediction = out["direct_z"]
                 loss = nn.functional.mse_loss(prediction, target)
+                if multitask:
+                    will_buy = (target > 0).float()
+                    loss = loss + aux_weight * (
+                        nn.functional.binary_cross_entropy_with_logits(out["churn_logit"], 1.0 - will_buy) +
+                        nn.functional.binary_cross_entropy_with_logits(out["reactivation_logit"], will_buy)
+                    )
+                    pos = target > 0
+                    if pos.any():
+                        loss = loss + aux_weight * nn.functional.mse_loss(out["conditional_z"][pos], target[pos])
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 optimizer.step()
@@ -70,4 +94,4 @@ class DirectETTAdapter(DirectModelAdapter):
                 inputs = (inputs[0].float(), inputs[1].float(), inputs[2].long(), inputs[3].bool(), inputs[4].bool())
                 predictions.append(model(*inputs)["direct_z"].detach().cpu().numpy())
         prediction = np.concatenate(predictions).astype(np.float64, copy=False)
-        return FoldPrediction(self.model_id, np.asarray(context.users), prediction, {"model_id": self.model_id, "epochs": config.values["epochs"], "fresh_model_per_fold": True, "direct_target": "log1p_gmv_30d"})
+        return FoldPrediction(self.model_id, np.asarray(context.users), prediction, {"model_id": self.model_id, "epochs": config.values["epochs"], "fresh_model_per_fold": True, "direct_target": "log1p_gmv_30d", "multitask": multitask})
