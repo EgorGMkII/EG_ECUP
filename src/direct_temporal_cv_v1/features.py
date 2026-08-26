@@ -79,7 +79,7 @@ class SparseAggregateFeatureProvider(FeatureProvider):
         if user_frame["user_id"].n_unique() != len(users):
             raise ValueError("users must be unique and template ordered")
         available = set(data.columns)
-        required = {"gmv", "gmv_search", "gmv_cat", "searches", "to_ord", "to_cart"}
+        required = {"gmv", "gmv_search", "gmv_cat", "searches", "to_ord", "to_cart", "cat", "search_to_ord", "cat_to_ord", "search_to_cart", "cat_to_cart"}
         missing = required - available
         if missing:
             raise ValueError(f"raw data missing required feature columns: {sorted(missing)}")
@@ -97,10 +97,21 @@ class SparseAggregateFeatureProvider(FeatureProvider):
         )
         result = user_frame
         feature_order: list[str] = []
-        active = (pl.col("searches") > 0) | (pl.col("to_cart") > 0) | (pl.col("to_ord") > 0) | (pl.col("gmv") > 0)
+        active = (pl.col("searches") > 0) | (pl.col("to_cart") > 0) | (pl.col("to_ord") > 0) | (pl.col("gmv") > 0) | (pl.col("cat") > 0)
         orders = (pl.col("to_ord") > 0) | (pl.col("gmv") > 0)
-        metric_specs = (("gmv", "gmv"), ("gmv_search", "gmv_search"), ("gmv_cat", "gmv_cat"),
-                        ("searches", "searches"), ("to_ord", "orders"), ("to_cart", "carts"))
+        metric_specs = (
+            ("gmv", "gmv"),
+            ("gmv_search", "gmv_search"),
+            ("gmv_cat", "gmv_cat"),
+            ("searches", "searches"),
+            ("to_ord", "orders"),
+            ("to_cart", "carts"),
+            ("cat", "cat"),
+            ("search_to_ord", "search_orders"),
+            ("cat_to_ord", "cat_orders"),
+            ("search_to_cart", "search_carts"),
+            ("cat_to_cart", "cat_carts"),
+        )
         for days in WINDOWS:
             start = anchor - timedelta(days=days - 1)
             window = history.filter(pl.col("event_date") >= start)
@@ -108,8 +119,9 @@ class SparseAggregateFeatureProvider(FeatureProvider):
                 active.cast(pl.Int8).sum().alias(f"active_days_{days}d"),
                 orders.cast(pl.Int8).sum().alias(f"order_days_{days}d"),
                 (pl.col("to_cart") > 0).cast(pl.Int8).sum().alias(f"cart_days_{days}d"),
+                (pl.col("cat") > 0).cast(pl.Int8).sum().alias(f"cat_days_{days}d"),
             ]
-            names = [f"active_days_{days}d", f"order_days_{days}d", f"cart_days_{days}d"]
+            names = [f"active_days_{days}d", f"order_days_{days}d", f"cart_days_{days}d", f"cat_days_{days}d"]
             for source, output in metric_specs:
                 expressions.append(pl.col(source).fill_null(0.0).sum().alias(f"{output}_sum_{days}d"))
                 names.append(f"{output}_sum_{days}d")
@@ -125,13 +137,14 @@ class SparseAggregateFeatureProvider(FeatureProvider):
             (pl.lit(anchor) - pl.when(orders).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_order"),
             (pl.lit(anchor) - pl.when(pl.col("to_cart") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_cart"),
             (pl.lit(anchor) - pl.when(pl.col("gmv") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_gmv"),
+            (pl.lit(anchor) - pl.when(pl.col("cat") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_cat"),
             (pl.lit(anchor) - pl.col("event_date").min()).dt.total_days().alias("customer_age_days"),
             active.cast(pl.Int8).sum().alias("lifetime_active_days"),
             pl.when(pl.col("event_date") >= start_365d).then(pl.col("gmv")).otherwise(0.0).max().alias("max_single_day_gmv_365d"),
         ]
         lifetime = causal.group_by("user_id").agg(recency_exprs)
         result = result.join(lifetime, on="user_id", how="left")
-        feature_order.extend(["days_since_last_activity", "days_since_last_order", "days_since_last_cart", "days_since_last_gmv", "customer_age_days", "lifetime_active_days", "max_single_day_gmv_365d"])
+        feature_order.extend(["days_since_last_activity", "days_since_last_order", "days_since_last_cart", "days_since_last_gmv", "days_since_last_cat", "customer_age_days", "lifetime_active_days", "max_single_day_gmv_365d"])
 
         # Multi-scale continuous EWMA decay features
         dt_days = (pl.lit(anchor) - pl.col("event_date")).dt.total_days()
@@ -142,13 +155,15 @@ class SparseAggregateFeatureProvider(FeatureProvider):
             (pl.col("to_cart") * (-dt_days / 30.0).exp()).sum().alias("ewma_carts_tau30"),
             (pl.col("gmv") * (-dt_days / 7.0).exp()).sum().alias("ewma_gmv_tau7"),
             (pl.col("gmv") * (-dt_days / 30.0).exp()).sum().alias("ewma_gmv_tau30"),
+            (pl.col("cat") * (-dt_days / 7.0).exp()).sum().alias("ewma_cat_tau7"),
+            (pl.col("cat") * (-dt_days / 30.0).exp()).sum().alias("ewma_cat_tau30"),
         ]
-        ewma_names = ["ewma_searches_tau7", "ewma_searches_tau30", "ewma_carts_tau7", "ewma_carts_tau30", "ewma_gmv_tau7", "ewma_gmv_tau30"]
+        ewma_names = ["ewma_searches_tau7", "ewma_searches_tau30", "ewma_carts_tau7", "ewma_carts_tau30", "ewma_gmv_tau7", "ewma_gmv_tau30", "ewma_cat_tau7", "ewma_cat_tau30"]
         ewma_df = history.group_by("user_id").agg(ewma_exprs)
         result = result.join(ewma_df, on="user_id", how="left")
         feature_order.extend(ewma_names)
 
-        recency = {"days_since_last_activity", "days_since_last_order", "days_since_last_cart", "days_since_last_gmv", "customer_age_days"}
+        recency = {"days_since_last_activity", "days_since_last_order", "days_since_last_cart", "days_since_last_gmv", "days_since_last_cat", "customer_age_days"}
         fill = [pl.col(c).fill_null(999.0) if c in recency else pl.col(c).fill_null(0.0) for c in feature_order]
         result = result.with_columns(fill).select(["user_id", *feature_order])
 
@@ -191,34 +206,48 @@ class SparseAggregateFeatureProvider(FeatureProvider):
             (pl.col("gmv_sum_90d") / (pl.col("searches_sum_90d") + 1.0)).clip(0.0, 10000.0).alias("gmv_to_search_ratio_90d"),
 
             # 7. Conversion Funnel & Cart Drops
-            (pl.col("cart_days_90d") / (pl.col("active_days_90d") + 0.1)).clip(0.0, 1.0).alias("search_to_cart_rate_90d"),
+            (pl.col("cart_days_90d") / (pl.col("active_days_90d") + 0.1)).clip(0.0, 1.0).alias("active_to_cart_rate_90d"),
             (pl.col("order_days_90d") / (pl.col("cart_days_90d") + 0.1)).clip(0.0, 10.0).alias("cart_to_order_rate_90d"),
             (pl.col("carts_sum_90d") - pl.col("orders_sum_90d")).clip(0.0, 9999.0).alias("cart_drop_intensity_90d"),
 
-            # 8. EWMA Momentum features
+            # 8. Catalog vs Search Intent & Funnels
+            (pl.col("cat_sum_90d") / (pl.col("searches_sum_90d") + pl.col("cat_sum_90d") + 0.1)).clip(0.0, 1.0).alias("cat_share_of_browsing_90d"),
+            (pl.col("cat_sum_30d") / (pl.col("searches_sum_30d") + pl.col("cat_sum_30d") + 0.1)).clip(0.0, 1.0).alias("cat_share_of_browsing_30d"),
+            (pl.col("cat_sum_7d") / (pl.col("searches_sum_7d") + pl.col("cat_sum_7d") + 0.1)).clip(0.0, 1.0).alias("cat_share_of_browsing_7d"),
+            (pl.col("gmv_cat_sum_90d") / (pl.col("gmv_sum_90d") + 0.1)).clip(0.0, 1.0).alias("cat_gmv_share_90d"),
+            (pl.col("gmv_cat_sum_30d") / (pl.col("gmv_sum_30d") + 0.1)).clip(0.0, 1.0).alias("cat_gmv_share_30d"),
+            (pl.col("gmv_search_sum_90d") / (pl.col("gmv_sum_90d") + 0.1)).clip(0.0, 1.0).alias("search_gmv_share_90d"),
+            (pl.col("search_orders_sum_90d") / (pl.col("searches_sum_90d") + 0.1)).clip(0.0, 10.0).alias("search_to_order_rate_90d"),
+            (pl.col("cat_orders_sum_90d") / (pl.col("cat_sum_90d") + 0.1)).clip(0.0, 10.0).alias("cat_to_order_rate_90d"),
+            (pl.col("search_carts_sum_90d") / (pl.col("searches_sum_90d") + 0.1)).clip(0.0, 10.0).alias("search_to_cart_rate_90d"),
+            (pl.col("cat_carts_sum_90d") / (pl.col("cat_sum_90d") + 0.1)).clip(0.0, 10.0).alias("cat_to_cart_rate_90d"),
+            (pl.col("ewma_cat_tau7") / (pl.col("ewma_cat_tau30") + 0.1)).clip(0.0, 20.0).alias("cat_momentum_7_to_30"),
+            (pl.col("days_since_last_order") - pl.col("days_since_last_cat")).clip(0.0, 999.0).alias("cat_without_order_gap"),
+
+            # 9. EWMA Momentum features
             (pl.col("ewma_searches_tau7") / (pl.col("ewma_searches_tau30") + 0.1)).clip(0.0, 20.0).alias("search_momentum_7_to_30"),
             (pl.col("ewma_carts_tau7") / (pl.col("ewma_carts_tau30") + 0.1)).clip(0.0, 20.0).alias("cart_momentum_7_to_30"),
             (pl.col("ewma_gmv_tau7") / (pl.col("ewma_gmv_tau30") + 0.1)).clip(0.0, 20.0).alias("gmv_momentum_7_to_30"),
 
-            # 9. Fast decay ratios (14d vs 60d)
+            # 10. Fast decay ratios (14d vs 60d)
             (pl.col("searches_sum_14d") / (pl.col("searches_sum_60d") * (14.0 / 60.0) + 1.0)).clip(0.0, 20.0).alias("searches_decay_14_to_60"),
             (pl.col("orders_sum_14d") / (pl.col("orders_sum_60d") * (14.0 / 60.0) + 0.1)).clip(0.0, 20.0).alias("orders_decay_14_to_60"),
             (pl.col("cart_days_14d") / (pl.col("cart_days_60d") * (14.0 / 60.0) + 0.1)).clip(0.0, 20.0).alias("cart_decay_14_to_60"),
 
-            # 10. Dormant browsing signals (active in searches/carts despite 0 orders in 30d)
+            # 11. Dormant browsing signals (active in searches/carts despite 0 orders in 30d)
             ((pl.col("days_since_last_order") > 30) & (pl.col("days_since_last_activity") <= 7)).cast(pl.Float32).alias("is_searching_dormant"),
             ((pl.col("days_since_last_order") > 30) & (pl.col("days_since_last_cart") <= 14)).cast(pl.Float32).alias("is_carting_dormant"),
             (pl.col("searches_sum_30d") / (pl.col("customer_age_days") + 1.0)).clip(0.0, 100.0).alias("dormant_search_density"),
             (pl.col("days_since_last_order") > (1.5 * ((pl.col("customer_age_days") - pl.col("days_since_last_order")) / pl.when(pl.col("order_days_365d") > 1).then(pl.col("order_days_365d") - 1).otherwise(1.0)).clip(1.0, 365.0))).cast(pl.Float32).alias("is_overdue"),
             (pl.col("cart_days_30d") / (pl.col("active_days_30d") + 0.1)).clip(0.0, 10.0).alias("cart_to_search_ratio_30d"),
 
-            # 11. Velocities: 30d vs 90d (30d rate / 90d average per 30d)
+            # 12. Velocities: 30d vs 90d (30d rate / 90d average per 30d)
             (pl.col("order_days_30d") / (pl.col("order_days_90d") / 3.0 + 0.1)).alias("order_velocity_30_to_90"),
             (pl.col("cart_days_30d") / (pl.col("cart_days_90d") / 3.0 + 0.1)).alias("cart_velocity_30_to_90"),
             (pl.col("searches_sum_30d") / (pl.col("searches_sum_90d") / 3.0 + 1.0)).alias("searches_velocity_30_to_90"),
             (pl.col("gmv_sum_30d") / (pl.col("gmv_sum_90d") / 3.0 + 1.0)).alias("gmv_velocity_30_to_90"),
 
-            # 12. Velocities: 7d vs 30d (7d rate / 30d average per 7d)
+            # 13. Velocities: 7d vs 30d (7d rate / 30d average per 7d)
             (pl.col("order_days_7d") / (pl.col("order_days_30d") * (7.0 / 30.0) + 0.1)).alias("order_velocity_7_to_30"),
             (pl.col("searches_sum_7d") / (pl.col("searches_sum_30d") * (7.0 / 30.0) + 1.0)).alias("searches_velocity_7_to_30"),
             (pl.col("cart_days_7d") / (pl.col("cart_days_30d") * (7.0 / 30.0) + 0.1)).alias("cart_velocity_7_to_30"),
@@ -228,7 +257,11 @@ class SparseAggregateFeatureProvider(FeatureProvider):
             "mean_order_interval_365d", "recency_to_cadence_ratio", "cycle_phase", "is_cycle_due_30d",
             "search_without_order_gap", "cart_intent_gap",
             "mean_ticket_gmv_365d", "mean_ticket_gmv_90d", "max_to_mean_gmv_ratio", "gmv_to_search_ratio_90d",
-            "search_to_cart_rate_90d", "cart_to_order_rate_90d", "cart_drop_intensity_90d",
+            "active_to_cart_rate_90d", "cart_to_order_rate_90d", "cart_drop_intensity_90d",
+            "cat_share_of_browsing_90d", "cat_share_of_browsing_30d", "cat_share_of_browsing_7d",
+            "cat_gmv_share_90d", "cat_gmv_share_30d", "search_gmv_share_90d",
+            "search_to_order_rate_90d", "cat_to_order_rate_90d", "search_to_cart_rate_90d", "cat_to_cart_rate_90d",
+            "cat_momentum_7_to_30", "cat_without_order_gap",
             "search_momentum_7_to_30", "cart_momentum_7_to_30", "gmv_momentum_7_to_30",
             "searches_decay_14_to_60", "orders_decay_14_to_60", "cart_decay_14_to_60",
             "is_searching_dormant", "is_carting_dormant", "dormant_search_density",
