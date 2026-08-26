@@ -96,8 +96,8 @@ def info_nce_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.1) 
 
 
 def train_coles_embeddings(
-    train_memmap: np.ndarray,
-    valid_memmap: np.ndarray,
+    train_memmap: np.ndarray | tuple,
+    valid_memmap: np.ndarray | tuple,
     user_ids: list[int],
     device: torch.device,
     epochs: int = 2,
@@ -106,6 +106,10 @@ def train_coles_embeddings(
     out_dim: int = 32
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Train self-supervised CoLES encoder and extract dense 32-dim user representations."""
+    if isinstance(train_memmap, tuple):
+        train_memmap = train_memmap[0]
+    if isinstance(valid_memmap, tuple):
+        valid_memmap = valid_memmap[0]
     in_features = train_memmap.shape[-1]
     dataset = EventSequenceDataset(train_memmap)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=0)
