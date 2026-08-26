@@ -10,6 +10,7 @@ from .adapters.catboost_cohort_specialist import CatBoostCohortSpecialistAdapter
 from .adapters.ett_classifier import ETTClassifierAdapter
 from .adapters.sequential_churn_classifier import SequentialChurnClassifierAdapter
 from .adapters.hybrid_cohort_specialist import HybridCohortSpecialistAdapter
+from .adapters.lightgbm_direct import DirectLightGBMAdapter
 
 
 class _UnimplementedAdapter(DirectModelAdapter):
@@ -29,6 +30,7 @@ class _UnimplementedAdapter(DirectModelAdapter):
 MODEL_REGISTRY = {
     "catboost_direct": DirectCatBoostAdapter,
     "catboost_cohort_specialist": CatBoostCohortSpecialistAdapter,
+    "lightgbm_direct": DirectLightGBMAdapter,
     "ett_direct": DirectETTAdapter,
     "tcn_direct": DirectTCNAdapter,
     "ett_classifier": ETTClassifierAdapter,
