@@ -62,9 +62,10 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
     adapters = build_adapters(config.enabled_models)
     for adapter in adapters:
         adapter.validate_config(config.raw["models"][adapter.model_id])
+    use_coles = bool(config.raw.get("features", {}).get("coles_v1", False))
     needs_tabular = any(adapter.requirements.tabular_features for adapter in adapters)
     needs_daily = any(adapter.requirements.daily_tensor for adapter in adapters)
-    needs_events = any(adapter.requirements.event_sequences for adapter in adapters)
+    needs_events = any(adapter.requirements.event_sequences for adapter in adapters) or use_coles
     if needs_tabular and not config.raw.get("features", {}).get("base_sparse_v1", False):
         raise ValueError("tabular direct models require features.base_sparse_v1=true")
     use_btyd = bool(config.raw.get("features", {}).get("btyd_v1", False))
@@ -93,20 +94,33 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
         fold_dir.mkdir()
         if snapshots is not None:
             write_json(fold_dir / "feature_manifest.json", snapshots.manifest)
-        # Heavy daily/event stores are temporary compute state, never output
-        # artifacts. Keeping them outside the run root prevents DataSphere's
-        # output downloader from attempting to fetch >1GB of memmaps.
-        store_root = Path(tempfile.mkdtemp(prefix=f"direct_cv_{fold.fold_id}_"))
-        daily_store = build_daily_tensor_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "daily") if needs_daily else None
-        event_store = build_event_memmap_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "events") if needs_events else None
+        use_coles = bool(config.raw.get("features", {}).get("coles_v1", False))
+        if use_coles:
+            from .coles import train_coles_embeddings
+            print(f"[DIRECT_CV] fold={fold.fold_id} CoLES training start...", flush=True)
+            coles_train, coles_valid = train_coles_embeddings(
+                event_store.get(fold.train_anchor.isoformat()),
+                event_store.get(fold.inference_anchor.isoformat()),
+                users.tolist(),
+                __import__("torch").device("cuda" if __import__("torch").cuda.is_available() else "cpu"),
+                epochs=2,
+                out_dim=32
+            )
+            snapshots_train = snapshots.train.join(coles_train, on="user_id")
+            snapshots_valid = snapshots.validation.join(coles_valid, on="user_id")
+            print(f"[DIRECT_CV] fold={fold.fold_id} CoLES joined: total features={len(snapshots_train.columns)-1}", flush=True)
+        else:
+            snapshots_train = snapshots.train if snapshots is not None else None
+            snapshots_valid = snapshots.validation if snapshots is not None else None
+
         fold_reports: dict[str, Any] = {}
         context_kwargs = {
             "fold": fold,
             "users": users,
             "train_target_z": train_z,
             "validation_target_z": validation_z,
-            "train_tabular": snapshots.train if snapshots is not None else None,
-            "validation_tabular": snapshots.validation if snapshots is not None else None,
+            "train_tabular": snapshots_train,
+            "validation_tabular": snapshots_valid,
             "train_daily": daily_store.get(fold.train_anchor.isoformat()) if daily_store is not None else None,
             "validation_daily": daily_store.get(fold.inference_anchor.isoformat()) if daily_store is not None else None,
             "train_events": event_store.get(fold.train_anchor.isoformat()) if event_store is not None else None,
