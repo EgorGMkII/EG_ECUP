@@ -1,0 +1,28 @@
+name: ozon-cb-price-ett-iso-sub
+desc: "Full 250k submission: 0.70 CatBoost Price Natural + 0.30 ETT Direct with 3-Season Isotonic Calibration."
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ;
+  python3 -u scripts/build_direct_cb_price_natural_ett_isotonic_submission.py
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_cb_price_natural_ett_isotonic_submission/submission.csv
+  - artifacts/direct_cb_price_natural_ett_isotonic_submission/manifest.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
