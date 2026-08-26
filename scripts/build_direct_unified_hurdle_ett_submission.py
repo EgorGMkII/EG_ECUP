@@ -20,9 +20,9 @@ from src.direct_temporal_cv_v1.adapters.hybrid_cohort_specialist import HybridCo
 from src.direct_temporal_cv_v1.adapters.direct_ett import DirectETTAdapter
 from src.direct_temporal_cv_v1.base import FoldContext
 from src.direct_temporal_cv_v1.contracts import TemporalFold
-from src.direct_temporal_cv_v1.datasets import build_daily_tensor_store, build_target_z
+from src.direct_temporal_cv_v1.datasets import build_target_z
 from src.direct_temporal_cv_v1.features import SparseAggregateFeatureProvider
-from src.ssl_temporal_stack_v1.stores import build_event_memmap_store
+from src.ssl_temporal_stack_v1.stores import build_daily_tensor_store, build_event_memmap_store
 
 
 def sha256_file(p: Path) -> str:
