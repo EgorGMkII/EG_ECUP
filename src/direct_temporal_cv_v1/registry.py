@@ -9,6 +9,7 @@ from .adapters.direct_tcn import DirectTCNAdapter
 from .adapters.catboost_cohort_specialist import CatBoostCohortSpecialistAdapter
 from .adapters.ett_classifier import ETTClassifierAdapter
 from .adapters.sequential_churn_classifier import SequentialChurnClassifierAdapter
+from .adapters.hybrid_cohort_specialist import HybridCohortSpecialistAdapter
 
 
 class _UnimplementedAdapter(DirectModelAdapter):
@@ -32,6 +33,7 @@ MODEL_REGISTRY = {
     "tcn_direct": DirectTCNAdapter,
     "ett_classifier": ETTClassifierAdapter,
     "sequential_churn_classifier": SequentialChurnClassifierAdapter,
+    "hybrid_cohort_specialist": HybridCohortSpecialistAdapter,
 }
 
 
