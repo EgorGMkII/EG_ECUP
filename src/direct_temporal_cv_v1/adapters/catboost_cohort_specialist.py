@@ -166,6 +166,12 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
         val_active_idx = np.where(val_active)[0]
         p_buy_active = cb_churn.predict_proba(x_val[val_active])[:, 1]
 
+        val_auc = None
+        if context.validation_target_z is not None and (context.validation_target_z > 0).any():
+            val_will_buy = (context.validation_target_z[val_active] > 0).astype(np.int32)
+            val_auc = float(roc_auc_score(val_will_buy, p_buy_active))
+            print(f"  [COHORT] >>> Churn classifier VAL AUC={val_auc:.6f} <<<", flush=True)
+
         reports["churn_classifier"] = {
             "iterations": v["churn_iterations"],
             "depth": v["churn_depth"],
@@ -174,6 +180,7 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
             "train_n": n_active_train,
             "train_buy_rate": buy_rate,
             "train_auc": train_auc,
+            "val_auc": val_auc,
             "val_active_n": int(val_active.sum()),
         }
 
