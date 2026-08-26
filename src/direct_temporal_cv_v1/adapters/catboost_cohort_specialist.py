@@ -34,10 +34,22 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
 
     def validate_config(self, raw: Mapping[str, Any]) -> ModelConfig:
         allowed = {
-            "churn_iterations", "churn_depth", "churn_learning_rate", "churn_l2_leaf_reg",
-            "amount_iterations", "amount_depth", "amount_learning_rate", "amount_l2_leaf_reg",
-            "inactive_iterations", "inactive_depth", "inactive_learning_rate", "inactive_l2_leaf_reg",
-            "thread_count", "random_seed", "activity_window_days",
+            "activity_window_days",
+            "churn_iterations",
+            "churn_depth",
+            "churn_learning_rate",
+            "churn_l2_leaf_reg",
+            "amount_iterations",
+            "amount_depth",
+            "amount_learning_rate",
+            "amount_l2_leaf_reg",
+            "inactive_iterations",
+            "inactive_depth",
+            "inactive_learning_rate",
+            "inactive_l2_leaf_reg",
+            "borderline_weight",
+            "thread_count",
+            "random_seed",
         }
         unknown = set(raw) - allowed
         if unknown:
@@ -61,6 +73,7 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
             "inactive_depth": int(raw.get("inactive_depth", 8)),
             "inactive_learning_rate": float(raw.get("inactive_learning_rate", 0.05)),
             "inactive_l2_leaf_reg": float(raw.get("inactive_l2_leaf_reg", 5.0)),
+            "borderline_weight": float(raw.get("borderline_weight", 1.0)),
             "thread_count": int(raw.get("thread_count", 8)),
             "random_seed": int(raw.get("random_seed", 42)),
         }
@@ -114,6 +127,15 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
         n_inactive_train_prelim = int((~train_active).sum())
         buy_rate = float(y_cls_target.mean())
 
+        # Sample weighting for borderline users (31-90d)
+        gmv_30d_idx = feature_order.index("gmv_sum_30d") if "gmv_sum_30d" in feature_order else None
+        if v["borderline_weight"] > 1.0 and gmv_30d_idx is not None:
+            is_borderline_active = x_train_active[:, gmv_30d_idx] == 0
+            sample_weight_active = np.where(is_borderline_active, v["borderline_weight"], 1.0)
+            print(f"  [COHORT] Applied borderline sample weighting ({v['borderline_weight']:.1f}x) to {is_borderline_active.sum()} hard samples", flush=True)
+        else:
+            sample_weight_active = None
+
         print(
             f"  [COHORT] Active train N={n_active_train} ({n_active_train/(n_active_train+n_inactive_train_prelim):.1%}), "
             f"Inactive train N={n_inactive_train_prelim}, buy_rate(active)={buy_rate:.4f}",
@@ -131,7 +153,7 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
             verbose=False,
             allow_writing_files=False,
         )
-        cb_churn.fit(x_train_active, y_cls_target, verbose=False)
+        cb_churn.fit(x_train_active, y_cls_target, sample_weight=sample_weight_active, verbose=False)
 
         # In-sample AUC (diagnostic only)
         from sklearn.metrics import roc_auc_score

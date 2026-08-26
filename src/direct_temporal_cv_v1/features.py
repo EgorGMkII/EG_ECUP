@@ -122,19 +122,20 @@ class SparseAggregateFeatureProvider(FeatureProvider):
         recency_exprs = [
             (pl.lit(anchor) - pl.col("event_date").max()).dt.total_days().alias("days_since_last_activity"),
             (pl.lit(anchor) - pl.when(orders).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_order"),
+            (pl.lit(anchor) - pl.when(pl.col("to_cart") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_cart"),
             (pl.lit(anchor) - pl.when(pl.col("gmv") > 0).then(pl.col("event_date")).otherwise(None).max()).dt.total_days().alias("days_since_last_gmv"),
             (pl.lit(anchor) - pl.col("event_date").min()).dt.total_days().alias("customer_age_days"),
             active.cast(pl.Int8).sum().alias("lifetime_active_days"),
         ]
         lifetime = causal.group_by("user_id").agg(recency_exprs)
         result = result.join(lifetime, on="user_id", how="left")
-        feature_order.extend(["days_since_last_activity", "days_since_last_order", "days_since_last_gmv", "customer_age_days", "lifetime_active_days"])
+        feature_order.extend(["days_since_last_activity", "days_since_last_order", "days_since_last_cart", "days_since_last_gmv", "customer_age_days", "lifetime_active_days"])
 
-        recency = {"days_since_last_activity", "days_since_last_order", "days_since_last_gmv", "customer_age_days"}
+        recency = {"days_since_last_activity", "days_since_last_order", "days_since_last_cart", "days_since_last_gmv", "customer_age_days"}
         fill = [pl.col(c).fill_null(999.0) if c in recency else pl.col(c).fill_null(0.0) for c in feature_order]
         result = result.with_columns(fill).select(["user_id", *feature_order])
 
-        # Cadence, interval and momentum features
+        # Cadence, interval, momentum and dormant browsing features
         cadence_exprs = [
             # 1. Mean order interval over 365d (IPI)
             ((pl.col("customer_age_days") - pl.col("days_since_last_order")) / pl.when(pl.col("order_days_365d") > 1).then(pl.col("order_days_365d") - 1).otherwise(1.0))
@@ -153,13 +154,25 @@ class SparseAggregateFeatureProvider(FeatureProvider):
             .clip(0.0, 999.0)
             .alias("search_without_order_gap"),
 
-            # 4. Velocities: 30d vs 90d (30d rate / 90d average per 30d)
+            # 4. Cart intent gap
+            (pl.col("days_since_last_order") - pl.col("days_since_last_cart"))
+            .clip(0.0, 999.0)
+            .alias("cart_intent_gap"),
+
+            # 5. Dormant browsing signals (active in searches/carts despite 0 orders in 30d)
+            ((pl.col("days_since_last_order") > 30) & (pl.col("days_since_last_activity") <= 7)).cast(pl.Float32).alias("is_searching_dormant"),
+            ((pl.col("days_since_last_order") > 30) & (pl.col("days_since_last_cart") <= 14)).cast(pl.Float32).alias("is_carting_dormant"),
+            (pl.col("searches_sum_30d") / (pl.col("customer_age_days") + 1.0)).clip(0.0, 100.0).alias("dormant_search_density"),
+            (pl.col("days_since_last_order") > (1.5 * ((pl.col("customer_age_days") - pl.col("days_since_last_order")) / pl.when(pl.col("order_days_365d") > 1).then(pl.col("order_days_365d") - 1).otherwise(1.0)).clip(1.0, 365.0))).cast(pl.Float32).alias("is_overdue"),
+            (pl.col("cart_days_30d") / (pl.col("active_days_30d") + 0.1)).clip(0.0, 10.0).alias("cart_to_search_ratio_30d"),
+
+            # 6. Velocities: 30d vs 90d (30d rate / 90d average per 30d)
             (pl.col("order_days_30d") / (pl.col("order_days_90d") / 3.0 + 0.1)).alias("order_velocity_30_to_90"),
             (pl.col("cart_days_30d") / (pl.col("cart_days_90d") / 3.0 + 0.1)).alias("cart_velocity_30_to_90"),
             (pl.col("searches_sum_30d") / (pl.col("searches_sum_90d") / 3.0 + 1.0)).alias("searches_velocity_30_to_90"),
             (pl.col("gmv_sum_30d") / (pl.col("gmv_sum_90d") / 3.0 + 1.0)).alias("gmv_velocity_30_to_90"),
 
-            # 5. Velocities: 7d vs 30d (7d rate / 30d average per 7d)
+            # 7. Velocities: 7d vs 30d (7d rate / 30d average per 7d)
             (pl.col("order_days_7d") / (pl.col("order_days_30d") * (7.0 / 30.0) + 0.1)).alias("order_velocity_7_to_30"),
             (pl.col("searches_sum_7d") / (pl.col("searches_sum_30d") * (7.0 / 30.0) + 1.0)).alias("searches_velocity_7_to_30"),
             (pl.col("cart_days_7d") / (pl.col("cart_days_30d") * (7.0 / 30.0) + 0.1)).alias("cart_velocity_7_to_30"),
@@ -167,11 +180,22 @@ class SparseAggregateFeatureProvider(FeatureProvider):
         ]
         cadence_names = [
             "mean_order_interval_365d", "recency_to_cadence_ratio", "search_without_order_gap",
+            "cart_intent_gap", "is_searching_dormant", "is_carting_dormant", "dormant_search_density",
+            "is_overdue", "cart_to_search_ratio_30d",
             "order_velocity_30_to_90", "cart_velocity_30_to_90", "searches_velocity_30_to_90", "gmv_velocity_30_to_90",
             "order_velocity_7_to_30", "searches_velocity_7_to_30", "cart_velocity_7_to_30", "gmv_velocity_7_to_30",
         ]
         result = result.with_columns(cadence_exprs)
         feature_order.extend(cadence_names)
+
+        # 8. BTYD Probabilistic Features (BG/NBD & Gamma-Gamma)
+        from src.btyd_pipeline import generate_btyd_dataset_for_anchor
+        btyd_df, _, _ = generate_btyd_dataset_for_anchor(causal, list(users), anchor, fit_models=True)
+        btyd_cols = [c for c in btyd_df.columns if c.startswith("btyd_")]
+        result = result.join(btyd_df.select(["user_id", *btyd_cols]), on="user_id", how="left")
+        btyd_fill = [pl.col(c).fill_null(0.0) for c in btyd_cols]
+        result = result.with_columns(btyd_fill)
+        feature_order.extend(btyd_cols)
 
         values = result.select(feature_order)
         # Polars can produce null/invalid values from malformed input. Make
