@@ -102,9 +102,9 @@ class SequentialChurnClassifierAdapter(DirectModelAdapter):
 
         started = time.perf_counter()
 
-        # Load daily causal tensors (shape: N, 180, 15)
-        x_train_daily = context.train_daily.get_tensor(context.users)
-        x_val_daily = context.validation_daily.get_tensor(context.users)
+        # Direct daily causal arrays (shape: N, 180, 15)
+        x_train_daily = context.train_daily
+        x_val_daily = context.validation_daily
 
         # Activity definition: GMV or orders in last 90d (channels 0 and 3)
         train_active = (x_train_daily[:, -90:, 0].sum(axis=1) > 0) | (x_train_daily[:, -90:, 3].sum(axis=1) > 0)
@@ -183,7 +183,7 @@ class SequentialChurnClassifierAdapter(DirectModelAdapter):
         x_train_tab = train_tab.select(feature_order).to_numpy().astype(np.float32, copy=False)
         x_val_tab = val_tab.select(feature_order).to_numpy().astype(np.float32, copy=False)
 
-        active_buyers_mask = train_active & (train_will_buy.astype(bool))
+        active_buyers_mask = train_active & (train_will_buy.numpy().astype(bool))
         cb_amount = CatBoostRegressor(iterations=350, depth=8, learning_rate=0.05, loss_function="RMSE", verbose=False, allow_writing_files=False)
         cb_amount.fit(x_train_tab[active_buyers_mask], train_z[active_buyers_mask], verbose=False)
         cond_z_val = np.maximum(cb_amount.predict(x_val_tab[val_active]), 0.0)
@@ -201,9 +201,8 @@ class SequentialChurnClassifierAdapter(DirectModelAdapter):
         elapsed = time.perf_counter() - started
         return FoldPrediction(
             model_id=self.model_id,
-            fold_id=context.fold.fold_id,
+            user_ids=np.asarray(context.users),
             prediction_z=prediction_z,
-            elapsed_seconds=elapsed,
             training_report={
                 "model_id": self.model_id,
                 "fold_id": context.fold.fold_id,
