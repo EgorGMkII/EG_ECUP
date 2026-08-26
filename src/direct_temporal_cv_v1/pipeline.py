@@ -94,6 +94,9 @@ def run_cross_validation(config: ExperimentConfig, *, pre_run_sha: str, job_id: 
         fold_dir.mkdir()
         if snapshots is not None:
             write_json(fold_dir / "feature_manifest.json", snapshots.manifest)
+        store_root = Path(tempfile.mkdtemp(prefix=f"direct_cv_{fold.fold_id}_"))
+        daily_store = build_daily_tensor_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "daily") if needs_daily else None
+        event_store = build_event_memmap_store(raw, users.tolist(), (fold.train_anchor.isoformat(), fold.inference_anchor.isoformat()), store_root / "events") if needs_events else None
         use_coles = bool(config.raw.get("features", {}).get("coles_v1", False))
         if use_coles:
             from .coles import train_coles_embeddings
