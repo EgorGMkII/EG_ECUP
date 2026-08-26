@@ -1,0 +1,28 @@
+name: ozon-sub-funnel177-mt-ett
+desc: Full 250k training and submission build for Direct CatBoost 177f + Multi-Task Direct ETT blend (F4 CV 1.6830).
+cmd: >
+  export PYTHONPATH=. ;
+  python3 -u scripts/build_direct_funnel177_multitask_ett_submission.py
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_funnel177_multitask_ett_submission_v1/submission.csv
+  - artifacts/direct_funnel177_multitask_ett_submission_v1/manifest.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
