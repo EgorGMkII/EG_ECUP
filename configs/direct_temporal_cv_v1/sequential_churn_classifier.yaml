@@ -1,0 +1,22 @@
+experiment_id: direct_cv_sequential_churn_classifier_v1
+protocol: FOUR_FOLD_250K_V1
+root_seed: 42
+enabled_models:
+  - sequential_churn_classifier
+features:
+  base_sparse_v1: true
+models:
+  sequential_churn_classifier:
+    epochs: 3
+    batch_size: 512
+    learning_rate: 0.001
+    hidden_dim: 64
+    num_layers: 2
+    dropout: 0.1
+    weight_decay: 0.0001
+    history_days: 180
+    random_seed: 42
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+output_root: artifacts/direct_temporal_cv_v1/experiments/direct_cv_sequential_churn_classifier_v1
