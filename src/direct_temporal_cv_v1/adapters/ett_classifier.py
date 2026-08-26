@@ -40,6 +40,44 @@ class FocalLoss(nn.Module):
         return (alpha_t * focal_factor * bce).mean()
 
 
+class SupervisedContrastiveLoss(nn.Module):
+    """Supervised Contrastive Loss (SupCon, Khosla et al.) for binary active classification."""
+
+    def __init__(self, temperature: float = 0.1) -> None:
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(self, features: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        batch_size = features.shape[0]
+        if batch_size <= 1:
+            return torch.tensor(0.0, device=features.device)
+
+        labels = labels.contiguous().view(-1, 1)
+        mask = torch.eq(labels, labels.T).float().to(features.device)
+        logits_mask = torch.scatter(
+            torch.ones_like(mask),
+            1,
+            torch.arange(batch_size, device=features.device).view(-1, 1),
+            0,
+        )
+        mask = mask * logits_mask
+
+        norm_features = F.normalize(features, dim=-1)
+        anchor_dot_contrast = torch.div(torch.matmul(norm_features, norm_features.T), self.temperature)
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()
+
+        exp_logits = torch.exp(logits) * logits_mask
+        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True) + 1e-8)
+
+        mean_log_prob_pos = (mask * log_prob).sum(1) / (mask.sum(1) + 1e-8)
+        valid_pos = mask.sum(1) > 0
+        if not valid_pos.any():
+            return torch.tensor(0.0, device=features.device)
+
+        return -mean_log_prob_pos[valid_pos].mean()
+
+
 class ETTClassifierAdapter(DirectModelAdapter):
     model_id = "ett_classifier"
     requirements = ModelRequirements(event_sequences=True, tabular_features=True)
@@ -49,7 +87,7 @@ class ETTClassifierAdapter(DirectModelAdapter):
             "epochs", "batch_size", "learning_rate", "scheduler",
             "warmup_fraction", "weight_decay", "dropout", "history_days",
             "loss_type", "focal_gamma", "focal_alpha", "pos_weight",
-            "active_only", "activity_window_days",
+            "active_only", "activity_window_days", "supcon_weight", "temperature",
         }
         unknown = set(raw) - allowed
         if unknown:
@@ -72,6 +110,8 @@ class ETTClassifierAdapter(DirectModelAdapter):
             "pos_weight": float(raw.get("pos_weight", 1.0)),
             "active_only": bool(raw.get("active_only", False)),
             "activity_window_days": int(raw.get("activity_window_days", 90)),
+            "supcon_weight": float(raw.get("supcon_weight", 0.0)),
+            "temperature": float(raw.get("temperature", 0.1)),
         }
         if values["epochs"] not in {1, 2, 3, 4, 5}:
             raise ValueError("ett_classifier epochs must be between 1 and 5")
@@ -126,6 +166,8 @@ class ETTClassifierAdapter(DirectModelAdapter):
             pos_weight_t = torch.tensor(v["pos_weight"], device=device) if v["pos_weight"] != 1.0 else None
             criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight_t)
 
+        supcon_loss_fn = SupervisedContrastiveLoss(temperature=v["temperature"]) if v["supcon_weight"] > 0 else None
+
         started = time.perf_counter()
         batch_size = v["batch_size"]
         total_steps = v["epochs"] * (len(train_indices) // batch_size + 1)
@@ -159,6 +201,10 @@ class ETTClassifierAdapter(DirectModelAdapter):
                 embedding, _ = model.encode(*inputs)
                 logits = model.reactivation(embedding).squeeze(-1)
                 loss = criterion(logits, target)
+
+                if supcon_loss_fn is not None:
+                    loss_sc = supcon_loss_fn(embedding, target)
+                    loss = loss + v["supcon_weight"] * loss_sc
 
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()

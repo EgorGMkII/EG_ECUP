@@ -1,0 +1,35 @@
+name: ozon-direct-cv-ett-supcon-active
+desc: Four-fold 250k CV for Supervised Contrastive ETT Classifier on active users (10 vs 11 separation).
+cmd: >
+  export PYTHONPATH=. ; export CUDA_VISIBLE_DEVICES=0 ;
+  python3 -u scripts/run_direct_temporal_cv.py
+  --experiment-config configs/direct_temporal_cv_v1/ett_classifier_supcon_active.yaml
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/cv_summary.json
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/protocol_manifest.json
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/resolved_config.yaml
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/sha256sums.json
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/fold_F1_predictions.parquet
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/fold_F2_predictions.parquet
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/fold_F3_predictions.parquet
+  - artifacts/direct_temporal_cv_v1/experiments/direct_cv_ett_classifier_supcon_active_v1/fold_F4_predictions.parquet
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
