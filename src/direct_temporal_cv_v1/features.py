@@ -133,6 +133,46 @@ class SparseAggregateFeatureProvider(FeatureProvider):
         recency = {"days_since_last_activity", "days_since_last_order", "days_since_last_gmv", "customer_age_days"}
         fill = [pl.col(c).fill_null(999.0) if c in recency else pl.col(c).fill_null(0.0) for c in feature_order]
         result = result.with_columns(fill).select(["user_id", *feature_order])
+
+        # Cadence, interval and momentum features
+        cadence_exprs = [
+            # 1. Mean order interval over 365d (IPI)
+            ((pl.col("customer_age_days") - pl.col("days_since_last_order")) / pl.when(pl.col("order_days_365d") > 1).then(pl.col("order_days_365d") - 1).otherwise(1.0))
+            .clip(1.0, 365.0)
+            .alias("mean_order_interval_365d"),
+
+            # 2. Recency-to-cadence ratio
+            (pl.col("days_since_last_order") / (
+                ((pl.col("customer_age_days") - pl.col("days_since_last_order")) / pl.when(pl.col("order_days_365d") > 1).then(pl.col("order_days_365d") - 1).otherwise(1.0)).clip(1.0, 365.0)
+            ))
+            .clip(0.0, 50.0)
+            .alias("recency_to_cadence_ratio"),
+
+            # 3. Search without order gap (active shopper intent before anchor)
+            (pl.col("days_since_last_order") - pl.col("days_since_last_activity"))
+            .clip(0.0, 999.0)
+            .alias("search_without_order_gap"),
+
+            # 4. Velocities: 30d vs 90d (30d rate / 90d average per 30d)
+            (pl.col("order_days_30d") / (pl.col("order_days_90d") / 3.0 + 0.1)).alias("order_velocity_30_to_90"),
+            (pl.col("cart_days_30d") / (pl.col("cart_days_90d") / 3.0 + 0.1)).alias("cart_velocity_30_to_90"),
+            (pl.col("searches_sum_30d") / (pl.col("searches_sum_90d") / 3.0 + 1.0)).alias("searches_velocity_30_to_90"),
+            (pl.col("gmv_sum_30d") / (pl.col("gmv_sum_90d") / 3.0 + 1.0)).alias("gmv_velocity_30_to_90"),
+
+            # 5. Velocities: 7d vs 30d (7d rate / 30d average per 7d)
+            (pl.col("order_days_7d") / (pl.col("order_days_30d") * (7.0 / 30.0) + 0.1)).alias("order_velocity_7_to_30"),
+            (pl.col("searches_sum_7d") / (pl.col("searches_sum_30d") * (7.0 / 30.0) + 1.0)).alias("searches_velocity_7_to_30"),
+            (pl.col("cart_days_7d") / (pl.col("cart_days_30d") * (7.0 / 30.0) + 0.1)).alias("cart_velocity_7_to_30"),
+            (pl.col("gmv_sum_7d") / (pl.col("gmv_sum_30d") * (7.0 / 30.0) + 1.0)).alias("gmv_velocity_7_to_30"),
+        ]
+        cadence_names = [
+            "mean_order_interval_365d", "recency_to_cadence_ratio", "search_without_order_gap",
+            "order_velocity_30_to_90", "cart_velocity_30_to_90", "searches_velocity_30_to_90", "gmv_velocity_30_to_90",
+            "order_velocity_7_to_30", "searches_velocity_7_to_30", "cart_velocity_7_to_30", "gmv_velocity_7_to_30",
+        ]
+        result = result.with_columns(cadence_exprs)
+        feature_order.extend(cadence_names)
+
         values = result.select(feature_order)
         # Polars can produce null/invalid values from malformed input. Make
         # the failure explicit before a model sees them.

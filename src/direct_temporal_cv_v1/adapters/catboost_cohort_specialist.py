@@ -161,32 +161,31 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
 
         print(f"  [COHORT] Active buyers train N={n_buyers}", flush=True)
 
-        cb_amount = CatBoostRegressor(
-            iterations=v["amount_iterations"],
-            depth=v["amount_depth"],
-            learning_rate=v["amount_learning_rate"],
-            l2_leaf_reg=v["amount_l2_leaf_reg"],
-            loss_function="RMSE",
-            thread_count=threads,
-            random_seed=seed,
-            verbose=False,
-            allow_writing_files=False,
-        )
-        cb_amount.fit(x_train_buyers, z_train_buyers, verbose=False)
-
-        cond_z_active = np.maximum(cb_amount.predict(x_val[val_active]), 0.0)
-
-        # Combine in z-space: E[z] = P(buy) * E[z|buy]
-        prediction_z[val_active_idx] = p_buy_active * cond_z_active
-
-        reports["amount_regressor"] = {
-            "iterations": v["amount_iterations"],
-            "depth": v["amount_depth"],
-            "lr": v["amount_learning_rate"],
-            "train_n": n_buyers,
-            "train_mean_z": float(z_train_buyers.mean()),
-            "train_std_z": float(z_train_buyers.std()),
-        }
+        if n_buyers > 0 and len(val_active_idx) > 0:
+            cb_amount = CatBoostRegressor(
+                iterations=v["amount_iterations"],
+                depth=v["amount_depth"],
+                learning_rate=v["amount_learning_rate"],
+                l2_leaf_reg=v["amount_l2_leaf_reg"],
+                loss_function="RMSE",
+                thread_count=threads,
+                random_seed=seed,
+                verbose=False,
+                allow_writing_files=False,
+            )
+            cb_amount.fit(x_train_buyers, z_train_buyers, verbose=False)
+            cond_z_active = np.maximum(cb_amount.predict(x_val[val_active]), 0.0)
+            prediction_z[val_active_idx] = p_buy_active * cond_z_active
+            reports["amount_regressor"] = {
+                "iterations": v["amount_iterations"],
+                "depth": v["amount_depth"],
+                "lr": v["amount_learning_rate"],
+                "train_n": n_buyers,
+                "train_mean_z": float(z_train_buyers.mean()),
+                "train_std_z": float(z_train_buyers.std()),
+            }
+        else:
+            reports["amount_regressor"] = {"train_n": n_buyers, "skipped": True}
 
         # ── Inactive cohort: direct regressor ────────────────────────────
         x_train_inactive = x_train[~train_active]
@@ -196,27 +195,27 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
 
         print(f"  [COHORT] Inactive train N={n_inactive_train}", flush=True)
 
-        cb_inactive = CatBoostRegressor(
-            iterations=v["inactive_iterations"],
-            depth=v["inactive_depth"],
-            learning_rate=v["inactive_learning_rate"],
-            l2_leaf_reg=v["inactive_l2_leaf_reg"],
-            loss_function="RMSE",
-            thread_count=threads,
-            random_seed=seed,
-            verbose=False,
-            allow_writing_files=False,
-        )
-        cb_inactive.fit(x_train_inactive, z_train_inactive, verbose=False)
-        prediction_z[val_inactive_idx] = np.maximum(cb_inactive.predict(x_val[~val_active]), 0.0)
-
-        elapsed = time.perf_counter() - started
-
-        reports["inactive_regressor"] = {
-            "iterations": v["inactive_iterations"],
-            "train_n": n_inactive_train,
-            "val_inactive_n": int(val_inactive_idx.shape[0]),
-        }
+        if n_inactive_train > 0 and len(val_inactive_idx) > 0:
+            cb_inactive = CatBoostRegressor(
+                iterations=v["inactive_iterations"],
+                depth=v["inactive_depth"],
+                learning_rate=v["inactive_learning_rate"],
+                l2_leaf_reg=v["inactive_l2_leaf_reg"],
+                loss_function="RMSE",
+                thread_count=threads,
+                random_seed=seed,
+                verbose=False,
+                allow_writing_files=False,
+            )
+            cb_inactive.fit(x_train_inactive, z_train_inactive, verbose=False)
+            prediction_z[val_inactive_idx] = np.maximum(cb_inactive.predict(x_val[~val_active]), 0.0)
+            reports["inactive_regressor"] = {
+                "iterations": v["inactive_iterations"],
+                "train_n": n_inactive_train,
+                "val_inactive_n": int(val_inactive_idx.shape[0]),
+            }
+        else:
+            reports["inactive_regressor"] = {"train_n": n_inactive_train, "skipped": True}
 
         # ── Validation AUC on held-out fold ──────────────────────────────
         val_z = context.validation_target_z
@@ -229,6 +228,7 @@ class CatBoostCohortSpecialistAdapter(DirectModelAdapter):
         if not np.isfinite(prediction_z).all():
             raise ValueError("Cohort specialist produced non-finite predictions")
 
+        elapsed = time.perf_counter() - started
         report = {
             "model_id": self.model_id,
             "fold_id": context.fold.fold_id,
