@@ -183,7 +183,7 @@ class SequentialChurnClassifierAdapter(DirectModelAdapter):
         x_train_tab = train_tab.select(feature_order).to_numpy().astype(np.float32, copy=False)
         x_val_tab = val_tab.select(feature_order).to_numpy().astype(np.float32, copy=False)
 
-        active_buyers_mask = train_active & (train_will_buy.numpy().astype(bool))
+        active_buyers_mask = train_active & (train_will_buy.astype(bool))
         cb_amount = CatBoostRegressor(iterations=350, depth=8, learning_rate=0.05, loss_function="RMSE", verbose=False, allow_writing_files=False)
         cb_amount.fit(x_train_tab[active_buyers_mask], train_z[active_buyers_mask], verbose=False)
         cond_z_val = np.maximum(cb_amount.predict(x_val_tab[val_active]), 0.0)
