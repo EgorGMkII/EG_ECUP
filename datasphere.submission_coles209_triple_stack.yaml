@@ -1,0 +1,28 @@
+name: ozon-sub-coles209-triple-stack
+desc: Full 250k training and submission build for Triple Diversity Stack (CatBoost 209f + LightGBM 209f + Multi-Task Direct ETT).
+cmd: >
+  export PYTHONPATH=. ;
+  python3 -u scripts/build_direct_coles209_triple_stack_submission.py
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_coles209_triple_stack_submission_v1/submission.csv
+  - artifacts/direct_coles209_triple_stack_submission_v1/manifest.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
