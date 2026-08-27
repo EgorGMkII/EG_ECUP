@@ -174,7 +174,7 @@ def main():
     quad_z = 0.40 * freq_z + 0.28 * delta_z + 0.17 * two_z + 0.15 * cb_z
     quad_gmv = np.expm1(np.clip(quad_z, 0.0, 15.0))
 
-    sub_quad = pl.DataFrame({"user_id": users, "target": quad_gmv})
+    sub_quad = pl.DataFrame({"user_id": users, "predict": quad_gmv})
     sub_quad_path = out_dir / "submission_direct_next_gen_quad_stack_v1.csv"
     sub_quad.write_csv(sub_quad_path)
     logging.info(f"Saved Quad Stack submission: {sub_quad_path}")
@@ -186,13 +186,14 @@ def main():
     if champ_path.exists():
         logging.info("Blending with Record Champion Submission (1.6559)...")
         champ_df = pl.read_csv(champ_path)
-        champ_gmv = champ_df["target"].to_numpy()
+        col = "predict" if "predict" in champ_df.columns else champ_df.columns[1]
+        champ_gmv = champ_df[col].to_numpy()
         champ_z = np.log1p(np.clip(champ_gmv, 0.0, None))
 
         grand_z = 0.60 * champ_z + 0.40 * quad_z
         grand_gmv = np.expm1(np.clip(grand_z, 0.0, 15.0))
 
-        sub_grand = pl.DataFrame({"user_id": users, "target": grand_gmv})
+        sub_grand = pl.DataFrame({"user_id": users, "predict": grand_gmv})
         sub_grand_path = out_dir / "submission_grand_next_gen_champion_blend_v1.csv"
         sub_grand.write_csv(sub_grand_path)
         logging.info(f"Saved Grand Champion Blend submission: {sub_grand_path}")
