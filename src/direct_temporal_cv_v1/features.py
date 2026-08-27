@@ -250,11 +250,28 @@ class SparseAggregateFeatureProvider(FeatureProvider):
             (pl.col("searches_sum_30d") / (pl.col("searches_sum_90d") / 3.0 + 1.0)).alias("searches_velocity_30_to_90"),
             (pl.col("gmv_sum_30d") / (pl.col("gmv_sum_90d") / 3.0 + 1.0)).alias("gmv_velocity_30_to_90"),
 
-            # 13. Velocities: 7d vs 30d (7d rate / 30d average per 7d)
-            (pl.col("order_days_7d") / (pl.col("order_days_30d") * (7.0 / 30.0) + 0.1)).alias("order_velocity_7_to_30"),
-            (pl.col("searches_sum_7d") / (pl.col("searches_sum_30d") * (7.0 / 30.0) + 1.0)).alias("searches_velocity_7_to_30"),
-            (pl.col("cart_days_7d") / (pl.col("cart_days_30d") * (7.0 / 30.0) + 0.1)).alias("cart_velocity_7_to_30"),
-            (pl.col("gmv_sum_7d") / (pl.col("gmv_sum_30d") * (7.0 / 30.0) + 1.0)).alias("gmv_velocity_7_to_30"),
+            # 14. Short-Horizon Funnel & Cart Conversions (30d and 7d)
+            (pl.col("orders_sum_30d") / (pl.col("carts_sum_30d") + 0.1)).clip(0.0, 10.0).alias("cart_conversion_rate_30d"),
+            (pl.col("orders_sum_7d") / (pl.col("carts_sum_7d") + 0.1)).clip(0.0, 10.0).alias("cart_conversion_rate_7d"),
+            (pl.col("carts_sum_30d") - pl.col("orders_sum_30d")).clip(0.0, 9999.0).alias("cart_drop_intensity_30d"),
+            (pl.col("carts_sum_7d") - pl.col("orders_sum_7d")).clip(0.0, 9999.0).alias("cart_drop_intensity_7d"),
+            (pl.col("search_orders_sum_30d") / (pl.col("searches_sum_30d") + 0.1)).clip(0.0, 10.0).alias("search_to_order_rate_30d"),
+            (pl.col("search_orders_sum_7d") / (pl.col("searches_sum_7d") + 0.1)).clip(0.0, 10.0).alias("search_to_order_rate_7d"),
+            (pl.col("search_carts_sum_30d") / (pl.col("searches_sum_30d") + 0.1)).clip(0.0, 10.0).alias("search_to_cart_rate_30d"),
+            (pl.col("cat_orders_sum_30d") / (pl.col("cat_sum_30d") + 0.1)).clip(0.0, 10.0).alias("cat_to_order_rate_30d"),
+            (pl.col("cat_carts_sum_30d") / (pl.col("cat_sum_30d") + 0.1)).clip(0.0, 10.0).alias("cat_to_cart_rate_30d"),
+
+            # 15. Ticket Size Evolution (30d and 7d)
+            (pl.col("gmv_sum_30d") / (pl.col("orders_sum_30d") + 0.1)).clip(0.0, 100000.0).alias("mean_ticket_gmv_30d"),
+            (pl.col("gmv_sum_7d") / (pl.col("orders_sum_7d") + 0.1)).clip(0.0, 100000.0).alias("mean_ticket_gmv_7d"),
+            ((pl.col("gmv_sum_30d") / (pl.col("orders_sum_30d") + 0.1)) / ((pl.col("gmv_sum_90d") / (pl.col("orders_sum_90d") + 0.1)) + 1.0)).clip(0.0, 20.0).alias("ticket_growth_30_to_90"),
+            ((pl.col("gmv_sum_7d") / (pl.col("orders_sum_7d") + 0.1)) / ((pl.col("gmv_sum_30d") / (pl.col("orders_sum_30d") + 0.1)) + 1.0)).clip(0.0, 20.0).alias("ticket_growth_7_to_30"),
+
+            # 16. Lifetime Frequency & Channel Affinity
+            (pl.col("order_days_365d") / (pl.col("customer_age_days") + 1.0)).clip(0.0, 1.0).alias("order_density_lifetime"),
+            (pl.col("lifetime_active_days") / (pl.col("customer_age_days") + 1.0)).clip(0.0, 1.0).alias("active_density_lifetime"),
+            ((pl.col("search_orders_sum_90d") + 0.1) / (pl.col("cat_orders_sum_90d") + 0.1)).clip(0.0, 50.0).alias("search_vs_cat_order_ratio_90d"),
+            ((pl.col("search_gmv_share_90d") + 0.01) / (pl.col("cat_gmv_share_90d") + 0.01)).clip(0.0, 50.0).alias("search_vs_cat_gmv_ratio_90d"),
         ]
         cadence_names = [
             "mean_order_interval_365d", "recency_to_cadence_ratio", "cycle_phase", "is_cycle_due_30d",
@@ -271,6 +288,12 @@ class SparseAggregateFeatureProvider(FeatureProvider):
             "is_overdue", "cart_to_search_ratio_30d",
             "order_velocity_30_to_90", "cart_velocity_30_to_90", "searches_velocity_30_to_90", "gmv_velocity_30_to_90",
             "order_velocity_7_to_30", "searches_velocity_7_to_30", "cart_velocity_7_to_30", "gmv_velocity_7_to_30",
+            "cart_conversion_rate_30d", "cart_conversion_rate_7d", "cart_drop_intensity_30d", "cart_drop_intensity_7d",
+            "search_to_order_rate_30d", "search_to_order_rate_7d", "search_to_cart_rate_30d",
+            "cat_to_order_rate_30d", "cat_to_cart_rate_30d",
+            "mean_ticket_gmv_30d", "mean_ticket_gmv_7d", "ticket_growth_30_to_90", "ticket_growth_7_to_30",
+            "order_density_lifetime", "active_density_lifetime",
+            "search_vs_cat_order_ratio_90d", "search_vs_cat_gmv_ratio_90d",
         ]
         result = result.with_columns(cadence_exprs)
         feature_order.extend(cadence_names)
