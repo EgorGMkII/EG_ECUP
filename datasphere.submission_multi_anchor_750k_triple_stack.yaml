@@ -1,0 +1,28 @@
+name: ozon-sub-multi-anchor-750k
+desc: Multi-Anchor Pooled Training (750,000 samples across 3 anchor dates) for Triple Stack (CatBoost 209f + LightGBM 209f + Multi-Task Direct ETT) on GPU.
+cmd: >
+  export PYTHONPATH=. ;
+  python3 -u scripts/build_direct_multi_anchor_750k_triple_stack_submission.py
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_multi_anchor_750k_triple_stack_v1/submission.csv
+  - artifacts/direct_multi_anchor_750k_triple_stack_v1/manifest.json
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
