@@ -5,7 +5,7 @@ cmd: >-
   --train /home/jupyter/mnt/s3/train.parquet
   --sample-submit /home/jupyter/mnt/s3/sample_submit.csv
   --output-root artifacts/direct_226f_triple_stack_submission_v1
-  --pre-run-sha PRE_RUN_SHA_PLACEHOLDER
+  --pre-run-sha __PRE_RUN_SHA__
   --job-id $DS_JOB_ID
 
 env:
