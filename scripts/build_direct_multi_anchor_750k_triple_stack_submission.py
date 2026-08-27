@@ -150,6 +150,7 @@ def main() -> None:
     train_time = np.concatenate([events.get(anchor_strs[i])[1] for i in range(3)], axis=0)
     train_ranks = np.concatenate([events.get(anchor_strs[i])[2] for i in range(3)], axis=0)
     train_mask = np.concatenate([events.get(anchor_strs[i])[3] for i in range(3)], axis=0)
+    train_empty = np.concatenate([events.get(anchor_strs[i])[4] for i in range(3)], axis=0)
 
     class MultiAnchorEventDataset(Dataset):
         def __len__(self): return len(z_train)
@@ -159,6 +160,7 @@ def main() -> None:
                 torch.from_numpy(train_time[idx].astype(np.float32)),
                 torch.from_numpy(train_ranks[idx].astype(np.int64)),
                 torch.from_numpy(train_mask[idx]),
+                torch.from_numpy(train_empty[idx:idx+1]).squeeze(0),
                 torch.tensor(z_train[idx], dtype=torch.float32),
             )
 
@@ -169,10 +171,10 @@ def main() -> None:
 
     ett.train()
     for ep in range(2):
-        for c, t, r, m, target in ett_loader:
-            c, t, r, m, target = c.to(dev), t.to(dev), r.to(dev), m.to(dev), target.to(dev)
+        for c, t, r, m, e, target in ett_loader:
+            c, t, r, m, e, target = c.to(dev), t.to(dev), r.to(dev), m.to(dev), e.to(dev), target.to(dev)
             ett_opt.zero_grad()
-            out_logits = ett(c, t, r, m)
+            out_logits = ett(c, t, r, m, e)
             loss_direct = torch.nn.functional.mse_loss(out_logits["direct_z"], target)
             churn_lbl = (target <= 0.0).float()
             loss_churn = torch.nn.functional.binary_cross_entropy_with_logits(out_logits["churn_logit"], churn_lbl)
@@ -190,14 +192,15 @@ def main() -> None:
                 torch.from_numpy(test_events[1][idx].astype(np.float32)),
                 torch.from_numpy(test_events[2][idx].astype(np.int64)),
                 torch.from_numpy(test_events[3][idx]),
+                torch.from_numpy(test_events[4][idx:idx+1]).squeeze(0),
             )
     test_loader = DataLoader(TestEventDataset(), batch_size=512, shuffle=False)
     ett.eval()
     ett_preds = []
     with torch.no_grad():
-        for c, t, r, m in test_loader:
-            c, t, r, m = c.to(dev), t.to(dev), r.to(dev), m.to(dev)
-            ett_preds.append(ett(c, t, r, m)["direct_z"].cpu().numpy())
+        for c, t, r, m, e in test_loader:
+            c, t, r, m, e = c.to(dev), t.to(dev), r.to(dev), m.to(dev), e.to(dev)
+            ett_preds.append(ett(c, t, r, m, e)["direct_z"].cpu().numpy())
     z_pred_ett = np.concatenate(ett_preds, axis=0)
     print('[+] Multi-Task ETT training done.', flush=True)
 
