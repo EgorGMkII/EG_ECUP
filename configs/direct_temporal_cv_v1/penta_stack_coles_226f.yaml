@@ -1,5 +1,5 @@
 experiment_id: direct_cv_penta_stack_coles_226f_v1
-protocol: direct_four_fold_v1
+protocol: FOUR_FOLD_250K_V1
 root_seed: 42
 enabled_models:
   - catboost_direct
@@ -7,13 +7,12 @@ enabled_models:
   - catboost_tweedie
   - lightgbm_tweedie
 features:
-  provider: sparse_aggregate_v1
-  windows_days: [7, 14, 30, 60, 90, 180, 365]
-  use_coles_embeddings: true
-  coles_dim: 32
+  base_sparse_v1: true
+  coles_v1: true
+  btyd_v1: false
 models:
   catboost_direct:
-    iterations: 500
+    iterations: 400
     depth: 8
     learning_rate: 0.04
     l2_leaf_reg: 5.0
@@ -21,23 +20,39 @@ models:
     thread_count: 8
     random_seed: 42
   lightgbm_direct:
-    iterations: 500
+    n_estimators: 400
+    num_leaves: 127
+    max_depth: 12
     learning_rate: 0.04
-    thread_count: 8
-    random_seed: 42
+    subsample: 0.8
+    colsample_bytree: 0.7
+    min_child_samples: 50
+    reg_alpha: 1.0
+    reg_lambda: 5.0
+    n_jobs: 8
+    random_state: 42
   catboost_tweedie:
-    iterations: 500
+    iterations: 400
     depth: 7
     learning_rate: 0.03
     l2_leaf_reg: 5.0
+    loss_function: Tweedie:variance_power=1.3
     thread_count: 8
     random_seed: 42
   lightgbm_tweedie:
-    iterations: 500
+    n_estimators: 400
+    num_leaves: 127
+    max_depth: 12
     learning_rate: 0.03
-    thread_count: 8
-    random_seed: 42
+    tweedie_variance_power: 1.2
+    subsample: 0.8
+    colsample_bytree: 0.7
+    min_child_samples: 50
+    reg_alpha: 1.0
+    reg_lambda: 5.0
+    n_jobs: 8
+    random_state: 42
 inputs:
-  train_path: data/train.parquet
-  sample_submit_path: sample_submit.csv
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
 output_root: artifacts/direct_temporal_cv_v1/experiments/direct_cv_penta_stack_coles_226f_v1
