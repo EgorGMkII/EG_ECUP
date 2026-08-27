@@ -1,27 +1,30 @@
-name: ozon-direct-226f-triple-stack-submission
+name: ozon-direct-226f-triple-stack-sub
 desc: Full 250k training and inference for 226-Feature Triple Diversity Stack (CatBoost 226f + LightGBM 226f + Multi-Task Direct ETT) on GPU.
-cmd: >-
-  python3 scripts/build_direct_226f_triple_stack_submission.py
-  --train /home/jupyter/mnt/s3/train.parquet
-  --sample-submit /home/jupyter/mnt/s3/sample_submit.csv
+cmd: >
+  export PYTHONPATH=. ;
+  python3 -u scripts/build_direct_226f_triple_stack_submission.py
+  --train data/train.parquet
+  --sample-submit sample_submit.csv
   --output-root artifacts/direct_226f_triple_stack_submission_v1
   --pre-run-sha __PRE_RUN_SHA__
-  --job-id $DS_JOB_ID
-
+  --job-id __JOB_ID__
 env:
-  python: "3.10"
-  requirements: requirements-datasphere.txt
-
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
 inputs:
-  /home/jupyter/mnt/s3/train.parquet: data/train.parquet
-  /home/jupyter/mnt/s3/sample_submit.csv: sample_submit.csv
-
+  - data/train.parquet
+  - sample_submit.csv
 outputs:
-  - artifacts/direct_226f_triple_stack_submission_v1/submission.csv
-  - artifacts/direct_226f_triple_stack_submission_v1/manifest.json
-
-local-paths:
-  - src/
-  - scripts/
-  - configs/
-  - requirements-datasphere.txt
+  - artifacts/direct_226f_triple_stack_submission_v1/
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
