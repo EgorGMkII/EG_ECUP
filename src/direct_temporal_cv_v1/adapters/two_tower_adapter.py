@@ -15,26 +15,25 @@ from ..models.two_tower import TwoTowerEventNet
 
 class EventTupleDataset(Dataset):
     def __init__(self, memmap_tuple: tuple[np.ndarray, ...], targets: np.ndarray | None = None):
-        self.counts = memmap_tuple[0]
-        self.totals = memmap_tuple[1]
-        self.recency = memmap_tuple[2]
+        self.content = memmap_tuple[0]
+        self.time_feat = memmap_tuple[1]
+        self.ranks = memmap_tuple[2]
         self.mask = memmap_tuple[3]
-        self.static = memmap_tuple[4]
+        self.empty = memmap_tuple[4]
         self.targets = targets
 
     def __len__(self) -> int:
-        return self.counts.shape[0]
+        return self.content.shape[0]
 
     def __getitem__(self, idx: int):
-        c = torch.from_numpy(self.counts[idx].astype(np.float32))
-        t = torch.from_numpy(self.totals[idx].astype(np.float32))
-        r = torch.from_numpy(self.recency[idx].astype(np.float32))
+        c = torch.from_numpy(self.content[idx].astype(np.float32))
+        t = torch.from_numpy(self.time_feat[idx].astype(np.float32))
         m = torch.from_numpy(self.mask[idx])
-        s = torch.from_numpy(self.static[idx:idx + 1]).squeeze(0)
+        e = torch.tensor(bool(self.empty[idx]), dtype=torch.float32)
 
         if self.targets is not None:
-            return c, t, r, m, s, torch.tensor(self.targets[idx], dtype=torch.float32)
-        return c, t, r, m, s
+            return c, t, m, e, torch.tensor(self.targets[idx], dtype=torch.float32)
+        return c, t, m, e
 
 
 class DirectTwoTowerAdapter(DirectModelAdapter):
@@ -85,14 +84,12 @@ class DirectTwoTowerAdapter(DirectModelAdapter):
         train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True, drop_last=True)
         val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False)
 
-        count_dim = train_memmap[0].shape[-1]
-        total_dim = train_memmap[1].shape[-1]
-        static_dim = train_memmap[4].shape[-1]
+        content_dim = train_memmap[0].shape[-1]
+        time_dim = train_memmap[1].shape[-1]
 
         model = TwoTowerEventNet(
-            count_features=count_dim,
-            total_features=total_dim,
-            static_features=static_dim,
+            content_features=content_dim,
+            time_features=time_dim,
             latent_dim=config.values["latent_dim"],
             head_dropout=config.values["head_dropout"],
         ).to(dev)
@@ -109,16 +106,15 @@ class DirectTwoTowerAdapter(DirectModelAdapter):
         t0 = time.perf_counter()
         model.train()
         for ep in range(epochs):
-            for counts, totals, recency, mask, static, target in train_loader:
-                counts = counts.to(dev)
-                totals = totals.to(dev)
-                recency = recency.to(dev)
+            for content, time_feat, mask, empty, target in train_loader:
+                content = content.to(dev)
+                time_feat = time_feat.to(dev)
                 mask = mask.to(dev)
-                static = static.to(dev)
+                empty = empty.to(dev)
                 target = target.to(dev)
 
                 optimizer.zero_grad()
-                out = model(counts, totals, recency, mask, static)
+                out = model(content, time_feat, mask, empty)
 
                 loss_z = F.mse_loss(out["direct_z"], target)
                 churn_label = (target <= 0.0).float()
@@ -132,17 +128,15 @@ class DirectTwoTowerAdapter(DirectModelAdapter):
 
         # Predict
         model.eval()
-        t1 = time.perf_counter()
         preds_list = []
         with torch.no_grad():
-            for counts, totals, recency, mask, static in val_loader:
-                counts = counts.to(dev)
-                totals = totals.to(dev)
-                recency = recency.to(dev)
+            for content, time_feat, mask, empty in val_loader:
+                content = content.to(dev)
+                time_feat = time_feat.to(dev)
                 mask = mask.to(dev)
-                static = static.to(dev)
+                empty = empty.to(dev)
 
-                out = model(counts, totals, recency, mask, static)
+                out = model(content, time_feat, mask, empty)
                 preds_list.append(out["direct_z"].cpu().numpy())
 
         pred_z = np.clip(np.concatenate(preds_list, axis=0), 0.0, 15.0)
