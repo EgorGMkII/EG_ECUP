@@ -1,0 +1,31 @@
+name: ozon-direct-next-gen-sub
+desc: Full 250k training and submission generation for Next-Gen Quad Stack (Freq Specialists + Delta Reg + Two-Tower + CatBoost).
+cmd: >
+  export PYTHONPATH=. ;
+  python3 -u scripts/build_direct_next_generation_submission.py
+  --train-data data/train.parquet
+  --sample-submit sample_submit.csv
+  --output-dir artifacts/direct_temporal_cv_v1/submissions/next_gen_quad_v1
+  --pre-run-sha __PRE_RUN_SHA__
+  --job-id __JOB_ID__
+env:
+  python:
+    type: manual
+    version: 3.10.13
+    requirements-file: requirements-datasphere.txt
+    local-paths:
+      - src/
+      - scripts/
+      - configs/
+      - requirements-datasphere.txt
+      - submission_meta_blend_champions_v1.csv
+inputs:
+  - data/train.parquet
+  - sample_submit.csv
+outputs:
+  - artifacts/direct_temporal_cv_v1/submissions/next_gen_quad_v1/
+cloud-instance-types:
+  - g1.1
+working-storage:
+  type: SSD
+  size: 100Gb
