@@ -13,20 +13,9 @@ from .adapters.hybrid_cohort_specialist import HybridCohortSpecialistAdapter
 from .adapters.lightgbm_direct import DirectLightGBMAdapter
 from .adapters.catboost_tweedie import DirectCatBoostTweedieAdapter
 from .adapters.lightgbm_tweedie import DirectLightGBMTweedieAdapter
-
-
-class _UnimplementedAdapter(DirectModelAdapter):
-    """Temporary skeleton; concrete adapters replace its methods."""
-
-    def __init__(self, model_id: str, requirements: ModelRequirements) -> None:
-        self.model_id = model_id
-        self.requirements = requirements
-
-    def validate_config(self, raw):  # type: ignore[no-untyped-def]
-        raise NotImplementedError(f"{self.model_id} adapter has not been filled in")
-
-    def fit_predict_fold(self, context, config):  # type: ignore[no-untyped-def]
-        raise NotImplementedError(f"{self.model_id} adapter has not been filled in")
+from .adapters.frequency_specialist import DirectFrequencySpecialistAdapter
+from .adapters.delta_regressor import DirectDeltaRegressorAdapter
+from .adapters.two_tower_adapter import DirectTwoTowerAdapter
 
 
 MODEL_REGISTRY = {
@@ -35,6 +24,9 @@ MODEL_REGISTRY = {
     "lightgbm_direct": DirectLightGBMAdapter,
     "catboost_tweedie": DirectCatBoostTweedieAdapter,
     "lightgbm_tweedie": DirectLightGBMTweedieAdapter,
+    "direct_frequency_specialist": DirectFrequencySpecialistAdapter,
+    "direct_delta_regressor": DirectDeltaRegressorAdapter,
+    "two_tower_direct": DirectTwoTowerAdapter,
     "ett_direct": DirectETTAdapter,
     "tcn_direct": DirectTCNAdapter,
     "ett_classifier": ETTClassifierAdapter,

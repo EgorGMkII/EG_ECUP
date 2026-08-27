@@ -1,0 +1,57 @@
+experiment_id: direct_cv_next_generation_pack_v1
+protocol: FOUR_FOLD_250K_V1
+root_seed: 42
+enabled_models:
+  - catboost_direct
+  - direct_frequency_specialist
+  - direct_delta_regressor
+  - two_tower_direct
+features:
+  base_sparse_v1: true
+  coles_v1: true
+  btyd_v1: false
+models:
+  catboost_direct:
+    iterations: 400
+    depth: 8
+    learning_rate: 0.04
+    l2_leaf_reg: 5.0
+    loss_function: RMSE
+    thread_count: 8
+    random_seed: 42
+  direct_frequency_specialist:
+    min_orders_90d: 2
+    frequent_backend: catboost
+    dormant_backend: lightgbm
+    frequent_iterations: 400
+    frequent_depth: 8
+    frequent_lr: 0.04
+    frequent_l2: 5.0
+    dormant_iterations: 400
+    dormant_depth: 7
+    dormant_lr: 0.035
+    dormant_l2: 5.0
+    thread_count: 8
+    random_seed: 42
+  direct_delta_regressor:
+    baseline_feature: gmv_sum_30d
+    backend: catboost
+    iterations: 400
+    depth: 8
+    learning_rate: 0.04
+    l2_leaf_reg: 5.0
+    thread_count: 8
+    random_seed: 42
+  two_tower_direct:
+    epochs: 2
+    batch_size: 512
+    learning_rate: 0.0005
+    weight_decay: 0.0001
+    churn_weight: 0.2
+    latent_dim: 32
+    head_dropout: 0.1
+    seed: 42
+inputs:
+  train: data/train.parquet
+  sample_submit: sample_submit.csv
+output_root: artifacts/direct_temporal_cv_v1/experiments/direct_cv_next_generation_pack_v1

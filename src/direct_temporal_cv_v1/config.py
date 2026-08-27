@@ -13,7 +13,7 @@ import yaml
 from .contracts import TemporalFold, get_protocol
 
 
-MODEL_IDS = frozenset({"catboost_direct", "lightgbm_direct", "catboost_tweedie", "lightgbm_tweedie", "ett_direct", "tcn_direct", "catboost_cohort_specialist", "ett_classifier", "sequential_churn_classifier", "hybrid_cohort_specialist"})
+MODEL_IDS = frozenset({"catboost_direct", "lightgbm_direct", "catboost_tweedie", "lightgbm_tweedie", "direct_frequency_specialist", "direct_delta_regressor", "two_tower_direct", "ett_direct", "tcn_direct", "catboost_cohort_specialist", "ett_classifier", "sequential_churn_classifier", "hybrid_cohort_specialist"})
 _ROOT_KEYS = {"experiment_id", "protocol", "root_seed", "enabled_models", "features", "models", "inputs", "output_root", "blend"}
 
 
