@@ -45,6 +45,9 @@ class SparseAggregateFeatureProvider(FeatureProvider):
 
     provider_id = "sparse_aggregate_v1"
 
+    def build_snapshot(self, raw: pl.DataFrame, users: Sequence[int], anchor: date) -> pl.DataFrame:
+        return self._build_snapshot(raw, users, anchor)
+
     def build_pair(self, raw: pl.DataFrame, users: Sequence[int], train_anchor: date, validation_anchor: date) -> TabularSnapshots:
         train = self._build_snapshot(raw, users, train_anchor)
         validation = self._build_snapshot(raw, users, validation_anchor)
