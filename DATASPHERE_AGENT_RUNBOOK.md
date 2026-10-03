@@ -1,8 +1,43 @@
 # DataSphere: рабочий регламент агента
 
+Portfolio navigation: manifests are now under `configs/datasphere/`.
+All relative paths inside YAML remain relative to the repository `/job` root.
+Current direct-CV training is fresh per fold; the pooled RUN A/B notes below
+describe historical SSL/hurdle recipes. See `docs/REPRODUCTION.md` and
+`docs/SUBMISSION_PROVENANCE.md` before selecting a final recipe.
+The reference final-pair launcher is historical, not the team-final entrypoint.
+
+## Канонический подтверждённый launch recipe
+
+Последние успешные training jobs: CatBoost `bt1grsllg79uo3bnaoh9`, BTYD
+`bt1o5qbmt3gttgvcqhhq`, ETT `bt1b8gejphst6e7s2vrb`. У всех job creation
+занимал секунды и upload содержал только кодовый пакет около 1 MB.
+
+Для **всех новых direct temporal CV jobs** layout manifest фиксирован:
+
+```yaml
+env:
+  python:
+    local-paths: [src/, scripts/, configs/, requirements-datasphere.txt]
+inputs: [data/train.parquet, sample_submit.csv]
+outputs: [artifacts/<experiment>/] # только если скрипт удаляет transient stores
+```
+
+Нельзя добавлять raw files в `local-paths` и нельзя дублировать их в обоих
+секциях. Исходный parquet монтируется как input; on-VM строятся все feature
+stores, tensors, memmap и caches. Если runner не печатает `creating job ...`
+в течение минуты, это **локальная packaging problem**, не ждать часы:
+остановить submit, проверить `scripts/datasphere_cli_wrapper.py`, затем
+подтвердить `configs/datasphere/smoke/datasphere.smoke.yaml`.
+
+На Windows wrapper обязан использовать established workspace directory
+`.datasphere_tmp/` для temporary module archives. Endpoint policy блокирует
+files внутри новых `%TEMP%` directories; этот симптом выглядит как зависание
+после `archive_start`. Не возвращать `tempfile.TemporaryDirectory` без smoke.
+
 Этот файл — короткая операционная инструкция для запуска и сопровождения
 одного эксперимента. Главные источники правил: `DATASPHERE_WORKFLOW_RULES.md`,
-`DATASPHERE.md` и `SPECIALIZED_HURDLE_FLOW.md`. При противоречии приоритет у
+`DATASPHERE.md` и `docs/reports/SPECIALIZED_HURDLE_FLOW.md`. При противоречии приоритет у
 регламента workflow и фактической упаковки текущей версии CLI.
 
 ## Непереговорные правила

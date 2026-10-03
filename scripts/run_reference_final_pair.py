@@ -20,12 +20,12 @@ VERIFIER = ROOT / "scripts" / "verify_reference_experiment_artifacts.py"
 JOBS = (
     (
         "no_direct",
-        ROOT / "datasphere.reference_framework_v1_final_six_model_no_direct_v1.yaml",
+        ROOT / "configs/datasphere/archive/datasphere.reference_framework_v1_final_six_model_no_direct_v1.yaml",
         ROOT / "artifacts/reference_v1/experiments/post_ny_final_six_model_no_direct_v1",
     ),
     (
         "with_direct",
-        ROOT / "datasphere.reference_framework_v1_final_six_model_with_direct_v1.yaml",
+        ROOT / "configs/datasphere/archive/datasphere.reference_framework_v1_final_six_model_with_direct_v1.yaml",
         ROOT / "artifacts/reference_v1/experiments/post_ny_final_six_model_with_direct_v1",
     ),
 )

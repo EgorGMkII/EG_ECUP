@@ -7,14 +7,14 @@ baseline or a validation result.
 
 - Frozen specification: `docs/SSL_TEMPORAL_STACK_V1_SPEC.md`.
 - Full CLI: `scripts/run_ssl_temporal_stack_v1.py`.
-- Full DataSphere manifest: `datasphere.ssl_temporal_stack_v1_full.yaml`.
-- GPU smoke manifest: `datasphere.ssl_temporal_stack_v1_smoke.yaml`.
+- Full DataSphere manifest: `configs/datasphere/archive/datasphere.ssl_temporal_stack_v1_full.yaml`.
+- GPU smoke manifest: `configs/datasphere/archive/datasphere.ssl_temporal_stack_v1_smoke.yaml`.
 - Local tests: 37 passed on 2026-08-23 in conda environment `myenv`.
 - PRE-RUN commit: `3c25ab32af42a5ab85198207aa6dccf3af1fd09e`.
 - GPU DataSphere smoke: job `bt1nnrcov4knb6rrfc83`, `SUCCESS`.
 - Full DataSphere job: job `bt1rsfqtn9jj4e52blom`, `SUCCESS`.
 - Canonical internal validation RMSLE: `1.6811849063362259`.
-- Frozen result record: `docs/RESULT_SSL_TEMPORAL_STACK_V1_2026-08-23.md`.
+- Frozen result record: `docs/results/RESULT_SSL_TEMPORAL_STACK_V1_2026-08-23.md`.
 
 ## Local 100-user smoke
 

@@ -1,19 +1,4 @@
-"""Script 11: Generate docs/reports/SPECIALIZED_HURDLE_PRODUCTION_REPORT.md."""
-
-import json
-from pathlib import Path
-import polars as pl
-
-
-def main():
-    print("=" * 80)
-    print("11: GENERATE docs/reports/SPECIALIZED_HURDLE_PRODUCTION_REPORT.md")
-    print("=" * 80)
-
-    reports_dir = Path("artifacts/specialized_hurdle/reports")
-    reports_dir.mkdir(parents=True, exist_ok=True)
-
-    report_content = """# Производственный отчет по исследованию Specialized Hurdle Stack (docs/reports/SPECIALIZED_HURDLE_PRODUCTION_REPORT.md)
+# Производственный отчет по исследованию Specialized Hurdle Stack (docs/reports/SPECIALIZED_HURDLE_PRODUCTION_REPORT.md)
 
 ## 1. Архитектура и методология
 
@@ -56,13 +41,3 @@ def main():
 1. **Кандидаты для масштабирования**:
    * В финальный ансамбль для 250k рекомендуются: **ETT1 (180 токенов)**, **Shallow Router R3 (S1+S2)** и **CatBoost Full Specialist (375 признаков)**.
 2. **Параметр alpha**: Зафиксирован естественный вариант `alpha = 1.0`.
-"""
-
-    report_path = Path("docs/reports/SPECIALIZED_HURDLE_PRODUCTION_REPORT.md")
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(report_content)
-    print(f"[+] Saved final production report to {report_path}")
-
-
-if __name__ == "__main__":
-    main()

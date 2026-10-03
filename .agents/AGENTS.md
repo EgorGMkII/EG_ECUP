@@ -3,22 +3,35 @@
 ## 1. Описание проекта и его цель
 - **Проект**: Соревнование OZON ECUP по предсказанию User LTV (суммарного GMV).
 - **Цель**: Предсказание суммарных трат каждого из 250 000 пользователей за следующие 30 дней по историческим логам поисков и покупок.
-- **Задача**: Построение воспроизводимого, быстрого и высокоточного ML-пайплайна (предобработка данных в Polars, валидация по якорным датам, обучение моделей CatBoost/LightGBM/NN и генерация сабмитов).
+- **Текущий режим**: квалификация через четыре независимых temporal folds на полной когорте 250k. Используются direct CatBoost, causal BTYD ablation, direct ETT и direct TCN. Многоэтапные RUN A/RUN B specialists и nested meta-training временно не являются протоколом квалификации.
 
 ---
 
 ## 2. Карта документации и регламент работы с ней
 
+### Актуальный протокол квалификации
+
+- Каждый кандидат запускается как отдельный direct fold-CV experiment на 250k.
+- Четыре temporal folds; последний fold — независимый holdout и не участвует
+  в выборе конфигурации или blend-весов.
+- Для каждого fold фиксируются RMSLE/MSE, ошибки по `00/01/10/11`, GMV
+  buckets, prediction summary, seed и config hash.
+- ETT/TCN сначала сравниваются standalone с CatBoost baseline; только затем
+  строится leakage-safe blend. Полное обучение и submission выполняются после
+  выбора состава и весов.
+- `SPECIALIZED_HURDLE_*` — исторические документы Public pipeline, не текущая
+  инструкция обучения specialists.
+
 ### Существующие документы:
 1. [**`DATA_PREPROCESSING.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/DATA_PREPROCESSING.md) — Полное руководство по предобработке данных в Polars, нативным выражениям `pl.Expr`, архитектуре якорных дат (Time-CV) и батчингу.
-2. [**`EDA_PLAN.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/EDA_PLAN.md) — Пошаговый детальный 9-этапный план проведения исследовательского анализа данных (EDA).
-3. [**`EDA_RESULTS.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/EDA_RESULTS.md) — Итоговый конспект и численные результаты проведенных этапов EDA (аудит витрины, фолды, матрица состояний, бейзлайны, Hurdle результаты).
+2. [**`EDA_PLAN.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/docs/reports/EDA_PLAN.md) — Пошаговый детальный 9-этапный план проведения исследовательского анализа данных (EDA).
+3. [**`EDA_RESULTS.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/docs/reports/EDA_RESULTS.md) — Итоговый конспект и численные результаты проведенных этапов EDA (аудит витрины, фолды, матрица состояний, бейзлайны, Hurdle результаты).
 4. [**`train_classifier.ipynb`**](file:///c:/Users/egorg/Documents/OZON_ECUP/train_classifier.ipynb) — Исполняемый ноутбук обучения, валидации и SHAP-анализа первого этапа (CatBoost Classifier `P(target > 0)`).
 5. [**`train_hurdle.ipynb`**](file:///c:/Users/egorg/Documents/OZON_ECUP/train_hurdle.ipynb) — Сквозной ноутбук двухэтапного Hurdle пайплайна (Классификатор + Conditional Regressor), Purged Time-CV и генерации сабмита.
 6. [**`DATASPHERE.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/DATASPHERE.md) — Инструкция по развертыванию и запуску кода в Yandex DataSphere.
 7. [**`README.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/README.md) — Базовая информация о репозитории.
-8. [**`SPECIALIZED_HURDLE_REPORT.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/SPECIALIZED_HURDLE_REPORT.md) — Аналитический отчет по рекордному эксперименту Specialized Hurdle Stack (Public LB: 1.6649), декомпозиция ошибок по состояниям и вклады моделей.
-9. [**`SPECIALIZED_HURDLE_FLOW.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/SPECIALIZED_HURDLE_FLOW.md) — Инженерное руководство и каталог ошибок (Post-Mortem & Best Practices) для сквозного воспроизведения RUN 1 и RUN 2 в DataSphere.
+8. [**`SPECIALIZED_HURDLE_REPORT.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/docs/reports/SPECIALIZED_HURDLE_REPORT.md) — Аналитический отчет по рекордному эксперименту Specialized Hurdle Stack (Public LB: 1.6649), декомпозиция ошибок по состояниям и вклады моделей.
+9. [**`SPECIALIZED_HURDLE_FLOW.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/docs/reports/SPECIALIZED_HURDLE_FLOW.md) — Инженерное руководство и каталог ошибок (Post-Mortem & Best Practices) для сквозного воспроизведения RUN 1 и RUN 2 в DataSphere.
 10. [**`AGENTS.md`**](file:///c:/Users/egorg/Documents/OZON_ECUP/.agents/AGENTS.md) — Данный файл со стандартами и правилами разработки.
 
 ### Регламент работы с документацией:
@@ -71,7 +84,7 @@
      * Следовать регламенту в [`DATASPHERE_WORKFLOW_RULES.md`](file:///c:/Users/egorg/Documents/OZON_ECUP/DATASPHERE_WORKFLOW_RULES.md).
 
 7. **КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО тащить тяжелые готовые датасеты с сотнями колонок на ВМ (Сборка датасетов ТОЛЬКО на ВМ)**:
-   - В DataSphere передаются только исходные файлы (`data/train.parquet`, `data/snapshots/`, `selected_users_100k.parquet`), код и конфигурации.
+   - В direct fold-CV код и конфигурации передаются через `local-paths`, а raw `data/train.parquet` и `sample_submit.csv` — только через manifest `inputs`; не дублировать их в обеих секциях.
    - Запрещено загружать локально сгенерированные директории с десятками/сотнями временных таблиц (например, `artifacts/specialized_hurdle/feature_store/`, `oof/`).
    - Сборка итоговых обучающих витрин признаков, извлечение последовательностей, фильтрация по колонкам и якорям **ОБЯЗАТЕЛЬНО производятся на лету на самой ВМ в начале исполнения скрипта**.
    - Это обеспечивает моментальную отправку пакета (секунды) и исключает тайм-ауты сети и ConnectionResetError.

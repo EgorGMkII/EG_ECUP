@@ -1,5 +1,9 @@
 # Direct temporal CV v1 — implementation handoff
 
+Historical design document. The implementations now exist; use
+[REPRODUCTION.md](REPRODUCTION.md) for current entrypoints and
+[SUBMISSION_PROVENANCE.md](SUBMISSION_PROVENANCE.md) for final-result evidence.
+
 ## Objective
 
 Fill `src/direct_temporal_cv_v1/` without modifying historical Public builders,

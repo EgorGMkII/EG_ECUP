@@ -1,9 +1,9 @@
 # Direct temporal CV v1 — extension runbook
 
 The baseline path is `configs/direct_temporal_cv_v1/baseline_catboost.yaml`.
-It is the only config currently allowed to run. ETT, TCN and BTYD are wired
-as explicit extension points but their adapters intentionally fail fast until
-their parity tests are implemented.
+CatBoost, ETT, TCN and BTYD implementations are present. This document records
+the original extension design; current commands and limitations are in
+[REPRODUCTION.md](REPRODUCTION.md) and [EXPERIMENT_INDEX.md](EXPERIMENT_INDEX.md).
 
 ## Contract-check commands
 

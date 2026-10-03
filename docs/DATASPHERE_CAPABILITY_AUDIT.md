@@ -5,7 +5,7 @@
 The verified execution path is exclusively the repository runner:
 
 ```powershell
-C:\Users\egorg\anaconda3\envs\myenv\python.exe scripts\datasphere_runner.py -c datasphere.smoke.yaml
+C:\Users\egorg\anaconda3\envs\myenv\python.exe scripts\datasphere_runner.py -c configs/datasphere/smoke/datasphere.smoke.yaml
 ```
 
 The runner uses `C:\Users\egorg\anaconda3\envs\myenv\Scripts\datasphere.exe`

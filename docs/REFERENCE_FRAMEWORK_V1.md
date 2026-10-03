@@ -46,7 +46,7 @@ is used for base pooled datasets.
   created afresh in RUN A and RUN B; neither consumes prediction columns from
   the existing stack.
 - BTYD follows the accepted `B1_BTYD_ProbCount_ClassifierOnly` contract from
-  `BTYD_LEAKAGE_AUDIT.md`. In each run it builds exact causal full-history RFM
+  `docs/reports/BTYD_LEAKAGE_AUDIT.md`. In each run it builds exact causal full-history RFM
   from raw events, fits BG/NBD on at most 50k purchasing rows from training
   anchors only, and exposes exactly `btyd_p_buy_30d`,
   `btyd_expected_purchases_30d`, and `btyd_p_alive` to CatBoost React/Churn.

@@ -23,10 +23,10 @@ reproduced.
 
 1. Run the local `--local-dry-run` check.
 2. Commit and push the changed code and manifests as one PRE-RUN commit.
-3. Run `datasphere.record_recipe_attempt_smoke.yaml` through
+3. Run `configs/datasphere/archive/datasphere.record_recipe_attempt_smoke.yaml` through
    `scripts/datasphere_runner.py`; it tests CUDA, CatBoost GPU and FP16
    memmap only.
-4. If smoke passes, run `datasphere.record_recipe_attempt_full.yaml` through
+4. If smoke passes, run `configs/datasphere/archive/datasphere.record_recipe_attempt_full.yaml` through
    the same runner. The runner substitutes the committed SHA into its
    runtime-only YAML copy, since `/job` has no Git metadata.
 5. Validate downloaded outputs and create a RESULT commit. Upload the

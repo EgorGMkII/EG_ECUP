@@ -1,8 +1,4 @@
-"""Cross-validation orchestration skeleton.
-
-The filling agent must build/release one fold at a time and never reuse fitted
-models, optimizer state, or validation labels between folds.
-"""
+"""Sequential temporal CV with fresh models and independent stores per fold."""
 
 from __future__ import annotations
 

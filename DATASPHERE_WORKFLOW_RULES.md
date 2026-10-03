@@ -1,5 +1,10 @@
 # Регламент разработки и запуска заданий на Yandex DataSphere (DATASPHERE_WORKFLOW_RULES.md)
 
+Для текущих direct jobs точный layout задаёт `DATASPHERE_AGENT_RUNBOOK.md`:
+raw data — только `inputs`, код — `local-paths`. Примеры specialized/hurdle
+ниже исторические. Для документационной уборки не выполнять micro training;
+быстрые команды приведены в `docs/REPRODUCTION.md`.
+
 ---
 
 ## 🚨 Главный принцип: 100% локальная валидация перед отправкой на ВМ

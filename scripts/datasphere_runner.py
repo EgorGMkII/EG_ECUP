@@ -258,7 +258,7 @@ def monitor_and_download(job_id: str, project_id: str, token: str, poll_interval
 
 def main():
     parser = argparse.ArgumentParser(description="Autonomous DataSphere Job Runner")
-    parser.add_argument("-c", "--config", default="datasphere.gru_sweep.yaml", help="Path to DataSphere job YAML config")
+    parser.add_argument("-c", "--config", default="configs/datasphere/archive/datasphere.gru_sweep.yaml", help="Path to DataSphere job YAML config")
     parser.add_argument("-p", "--project-id", default=DEFAULT_PROJECT_ID, help="DataSphere Project ID")
     parser.add_argument("-t", "--token", default=None, help="Yandex Cloud OAuth Token")
     parser.add_argument("--id", default=None, help="Monitor existing Job ID")

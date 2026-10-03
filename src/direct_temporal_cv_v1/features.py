@@ -1,8 +1,4 @@
-"""Feature-provider skeleton for the audited sparse CatBoost contract.
-
-Fill this module from the supplied implementation guide.  Never use future
-rows and never build a user-by-day grid.
-"""
+"""Causal sparse aggregate features for the direct temporal CV models."""
 
 from __future__ import annotations
 

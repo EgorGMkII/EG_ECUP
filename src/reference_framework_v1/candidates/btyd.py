@@ -1,6 +1,6 @@
 """Audited, leakage-safe BTYD features for CatBoost classifiers.
 
-This mirrors the accepted B1 experiment in ``BTYD_LEAKAGE_AUDIT.md``: exact
+This mirrors the accepted B1 experiment in ``docs/reports/BTYD_LEAKAGE_AUDIT.md``: exact
 full-history RFM, BG/NBD fitted only on RUN training anchors, and three
 classifier-only outputs. Gamma-Gamma and monetary BTYD outputs are excluded.
 """

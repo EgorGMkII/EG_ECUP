@@ -43,12 +43,19 @@ run_status.json
 amount_scaler_*.json
 *_meta_weights*.json
 regularization_selection.json
-artifacts/
-smoke_result.json
-run_status.json
-amount_scaler_*.json
-*_meta_weights*.json
-regularization_selection.json
+
+# DataSphere packaging, credentials and disposable Python caches
+.datasphere_tmp/
+.ds_cache_test/
+.pytest_cache/
+pytest-cache-files-*/
+.env
+.env.*
+!.env.example
+.aws/
+*.pem
+*.key
+scratch/mmap*/
 
 # Jupyter Notebook checkpoints & autosaves
 .ipynb_checkpoints/
